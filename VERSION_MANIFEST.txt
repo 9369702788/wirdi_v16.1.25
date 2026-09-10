@@ -1,0 +1,27 @@
+WIRDI -- ALL changes since v243, consolidated (v244 through v251)
+================================================================================
+This SUPERSEDES Wirdi_changes_since_v243.zip -- that package only went up
+to v248. This one adds v249, v250, and v251 on top, with every file that
+was touched more than once (notification_service.dart, settings_screen.dart,
+home_dashboard_screen.dart) properly MERGED so no earlier fix is lost.
+
+lib/features/mushaf/mushaf_view_screen.dart          (v244) continuous-scroll stability
+lib/features/home/home_dashboard_screen.dart         (v245+v248 merged) hadith text/nav fix + moon phase in next-prayer card
+lib/features/hadith/hadith_collection_screen.dart    (v245) lazy-list scroll-to-target fix
+lib/core/services/mathhab_service.dart               (v246) default Mathhab -> Shafi'i
+lib/features/settings/settings_screen.dart           (v246+v251 merged) permission race fix, floating snackbar, Mathhab default, Adhan audio pre-download
+lib/core/services/moon_calculator.dart               (v247) phaseImageAsset()
+lib/features/moon/moon_screen.dart                   (v247) real moon images
+pubspec.yaml                                         (v247) registers moon phase assets
+assets/images/moon_phases/*.webp (8 files)           (v247) the moon phase images
+lib/features/prayer/prayer_times_screen.dart         (v248) moon phase in next-prayer card
+patch_manifest.py                                    (v249) boot-survival receivers + permission
+lib/main.dart                                        (v249) deferred permission request timing
+lib/core/services/notification_service.dart          (v249+v251 merged) permission verification, diagnostics getters, real Adhan reciter sound
+lib/l10n/*.arb (7 files)                             (v250) renamed outer hadith tool label
+lib/core/services/adhan_audio_cache.dart             (v251, NEW) downloads/caches selected Adhan reciter's audio locally
+lib/core/services/prayer_notification_scheduler.dart (v251) serialized reschedule queue (race-condition fix)
+
+Apply this ENTIRE package on top of your v243 build. Requires a full
+rebuild (flutter clean + rebuild) since patch_manifest.py output
+(AndroidManifest.xml receivers) changed.
