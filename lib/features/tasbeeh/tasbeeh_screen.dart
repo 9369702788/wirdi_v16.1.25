@@ -44,6 +44,7 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
   List<_TasbeehPhrase> _customPhrases = [];
   late _TasbeehPhrase _selected = _builtInPhrases.first;
   int _today = 0;
+  int _cycleCount = 0;
   int _total = 0;
   int _grandTotal = 0;
 
@@ -86,6 +87,7 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
     final prefs = await SharedPreferences.getInstance();
     final storedDay = prefs.getString('tasbeeh_day_${_selected.id}');
     final todayCount = storedDay == _todayKey() ? (prefs.getInt('tasbeeh_today_${_selected.id}') ?? 0) : 0;
+    final storedCycle = storedDay == _todayKey() ? (prefs.getInt('tasbeeh_cycle_${_selected.id}') ?? (todayCount % _selected.target)) : 0;
 
     // NOTE: this used to "self-correct" by bumping the persisted lifetime
     // total UP to match today's count whenever total < today. Under
@@ -101,6 +103,7 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
     final total = prefs.getInt('tasbeeh_total_${_selected.id}') ?? 0;
     setState(() {
       _today = todayCount;
+      _cycleCount = storedCycle;
       _total = total;
     });
     await _loadGrandTotal();
@@ -120,19 +123,22 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
   Future<void> _increment() async {
     HapticFeedback.mediumImpact();
 
-    final next = _today + 1;
+    final nextDaily = _today + 1;
+    final nextCycle = _cycleCount + 1;
     final nextTotal = _total + 1;
-    final completedCycle = next >= _selected.target;
+    final completedCycle = nextCycle >= _selected.target;
 
-    // When the selected target is completed, immediately start a fresh
-    // empty cycle while keeping the completed tap in the lifetime totals.
+    // The daily total NEVER resets. Only the visual tasbeeh cycle resets
+    // after the selected target, so the ring starts a fresh round while
+    // today's count and lifetime totals continue to accumulate.
     setState(() {
-      _today = completedCycle ? 0 : next;
+      _today = nextDaily;
+      _cycleCount = completedCycle ? 0 : nextCycle;
       _total = nextTotal;
       _grandTotal += 1;
     });
 
-    unawaited(_persistIncrement(next, nextTotal, completedCycle: completedCycle));
+    unawaited(_persistIncrement(nextDaily, nextTotal, completedCycle: completedCycle));
 
     if (completedCycle) {
       HapticFeedback.heavyImpact();
@@ -140,7 +146,8 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
   }
   Future<void> _persistIncrement(int next, int nextTotal, {bool completedCycle = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('tasbeeh_today_${_selected.id}', completedCycle ? 0 : next);
+    await prefs.setInt('tasbeeh_today_${_selected.id}', next);
+    await prefs.setInt('tasbeeh_cycle_${_selected.id}', completedCycle ? 0 : (next % _selected.target));
     await prefs.setString('tasbeeh_day_${_selected.id}', _todayKey());
     await prefs.setInt('tasbeeh_total_${_selected.id}', nextTotal);
     await UserProgressService.incrementTasbeehDailyTotal();
@@ -148,9 +155,9 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
 
   Future<void> _reset() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('tasbeeh_today_${_selected.id}', 0);
+    await prefs.setInt('tasbeeh_cycle_${_selected.id}', 0);
     await prefs.setString('tasbeeh_day_${_selected.id}', _todayKey());
-    setState(() => _today = 0);
+    setState(() => _cycleCount = 0);
   }
 
   void _selectPhrase(_TasbeehPhrase phrase) {
@@ -215,7 +222,7 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final progress = (_today / _selected.target).clamp(0.0, 1.0);
+    final progress = (_cycleCount / _selected.target).clamp(0.0, 1.0);
     final gloss = _selected.glossFor?.call(l10n);
 
     return Scaffold(
@@ -300,7 +307,7 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
                       child: CustomPaint(
                         painter: _TasbeehBeadsPainter(
                           count: _selected.target,
-                          litCount: _today.clamp(0, _selected.target),
+                          litCount: _cycleCount.clamp(0, _selected.target),
                         ),
                         child: Container(
                           margin: const EdgeInsets.all(10),
@@ -334,7 +341,7 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
                                 children: [
                                   FittedBox(
                                     fit: BoxFit.scaleDown,
-                                    child: Text('$_today', style: TextStyle(color: Colors.white, fontSize: landscape ? 48 : 64, fontWeight: FontWeight.w700)),
+                                    child: Text('$_cycleCount', style: TextStyle(color: Colors.white, fontSize: landscape ? 48 : 64, fontWeight: FontWeight.w700)),
                                   ),
                                   Text(_selected.text, style: const TextStyle(color: Colors.white70, fontSize: 14)),
                                 ],
