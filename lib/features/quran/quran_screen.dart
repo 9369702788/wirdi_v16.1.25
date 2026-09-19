@@ -528,6 +528,8 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
   String? _translationLoadError;
 
   int? _lastKnownPlayingAyah;
+  int? _currentVisibleAyah;
+  bool _visibleAyahUpdatePending = false;
 
   // Playback lives in the app-wide QuranAudioService (not owned by this
   // screen) so it survives navigation between screens. These getters
@@ -556,12 +558,19 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
 
     _loadFavorites();
     quranAudio.addListener(_onAudioChanged);
+    _scrollController.addListener(_scheduleVisibleAyahUpdate);
 
     if (appSettings.showTransliteration) {
       _loadTransliteration();
     }
 
     if (widget.scrollToAyah != null) {
+      _currentVisibleAyah = widget.scrollToAyah;
+      unawaited(UserProgressService.saveLastReading(
+        surahNumber: widget.surah.number,
+        surahName: widget.surah.name,
+        ayahNumber: widget.scrollToAyah!,
+      ));
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToAyah(widget.scrollToAyah!));
     }
   }
@@ -627,6 +636,12 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
     final playing = _playingAyah;
     if (_playingWholeSurah && playing != null && playing != _lastKnownPlayingAyah) {
       _lastKnownPlayingAyah = playing;
+      _currentVisibleAyah = playing;
+      unawaited(UserProgressService.saveLastReading(
+        surahNumber: widget.surah.number,
+        surahName: widget.surah.name,
+        ayahNumber: playing,
+      ));
       _scrollToAyah(playing);
     } else if (playing == null) {
       _lastKnownPlayingAyah = null;
@@ -636,6 +651,7 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
   @override
   void dispose() {
     quranAudio.removeListener(_onAudioChanged);
+    _scrollController.removeListener(_scheduleVisibleAyahUpdate);
     _scrollController.dispose();
     super.dispose();
   }
@@ -706,6 +722,32 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
   /// down (search the upper half); if everything built has a higher
   /// number, it's further up (search the lower half). This doesn't
   /// depend on guessing item height at all.
+  void _scheduleVisibleAyahUpdate() {
+    if (_visibleAyahUpdatePending || !mounted) return;
+    _visibleAyahUpdatePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _visibleAyahUpdatePending = false;
+      if (!mounted) return;
+      final screenCenter = MediaQuery.sizeOf(context).height * 0.5;
+      int? closest;
+      var bestDistance = double.infinity;
+      for (final entry in _ayahKeys.entries) {
+        final ctx = entry.value.currentContext;
+        if (ctx == null) continue;
+        final render = ctx.findRenderObject();
+        if (render is! RenderBox || !render.hasSize) continue;
+        final topLeft = render.localToGlobal(Offset.zero);
+        final center = topLeft.dy + render.size.height / 2;
+        final distance = (center - screenCenter).abs();
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          closest = entry.key;
+        }
+      }
+      if (closest != null) _currentVisibleAyah = closest;
+    });
+  }
+
   Future<void> _scrollToAyah(int ayahNumber) async {
     if (!mounted) return;
     for (var attempt = 0; attempt < 12; attempt++) {
@@ -730,7 +772,7 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
     try {
       final pages = await MushafRepository.load();
       var startPage = MushafRepository.firstPageForSurah(pages, widget.surah.number) ?? 1;
-      final targetAyah = _lastKnownPlayingAyah ?? widget.scrollToAyah;
+      final targetAyah = _lastKnownPlayingAyah ?? _currentVisibleAyah ?? widget.scrollToAyah;
       if (targetAyah != null) {
         for (final page in pages) {
           if (page.ayahs.any((a) => a.surahNumber == widget.surah.number && a.ayahNumber == targetAyah)) {
@@ -807,8 +849,11 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
     );
 
     if (chosen != null && chosen != appSettings.reciterId) {
-      await quranAudio.stop();
-      await appSettings.setReciterId(chosen);
+      await quranAudio.changeReciter(
+        chosen,
+        surah: widget.surah,
+        allSurahs: widget.allSurahs,
+      );
       if (mounted) setState(() {});
     }
   }
@@ -852,8 +897,8 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
   }
 
   Future<void> _showPlaybackSpeedPicker() async {
-final languageCode = Localizations.localeOf(context).languageCode;
-final isAr = languageCode == 'ar';    
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final isAr = languageCode == 'ar';
     final selected = await showModalBottomSheet<double>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -995,6 +1040,12 @@ final isAr = languageCode == 'ar';
   }
 
   Future<void> _playAyah(int ayahNumber, {bool keepRepeat = false}) async {
+    _currentVisibleAyah = ayahNumber;
+    unawaited(UserProgressService.saveLastReading(
+      surahNumber: widget.surah.number,
+      surahName: widget.surah.name,
+      ayahNumber: ayahNumber,
+    ));
     await quranAudio.playAyah(widget.surah, widget.allSurahs, ayahNumber, keepRepeat: keepRepeat);
   }
 
