@@ -30,6 +30,7 @@ dependencies:
   flutter_local_notifications: ^19.4.2
   timezone: ^0.10.1
   audio_service: ^0.18.15
+  google_fonts: ^6.2.1
   package_info_plus: ^9.0.1
   wakelock_plus: ^1.2.4
   qcf_quran:
@@ -68,4 +69,5 @@ flutter:
   assets:
     - assets/fonts/
     - assets/images/moon_phases/
-    - assets/images/ui/
+    - assets/images/wirdi_mosaic.png
+    - assets/images/generated/
