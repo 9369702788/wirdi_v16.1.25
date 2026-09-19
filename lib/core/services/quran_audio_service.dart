@@ -29,6 +29,7 @@ class QuranAudioService extends ChangeNotifier {
   bool _initialized = false;
 
   int? _surahNumber;
+  String? _surahName;
   int _surahAyahOffset = 0;
   int _totalAyahsInSurah = 0;
   int? _rangeStartAyah;
@@ -52,11 +53,13 @@ class QuranAudioService extends ChangeNotifier {
   /// only tries to resume [_standby] when this matches the ayah it's
   /// advancing to; otherwise it falls back to a normal fresh fetch.
   int? _preloadedAyah;
+  bool _advanceInProgress = false;
 
   /// The surah currently loaded for playback, or null if nothing is
   /// playing. Exposed for UI (e.g. a global mini-player) that needs to
   /// display what's playing without already knowing the surah number.
   int? get currentSurahNumber => _surahNumber;
+  String? get currentSurahName => _surahName;
 
   bool isPlayingFor(int surahNumber, int ayahNumber) =>
       _surahNumber == surahNumber && playingAyah == ayahNumber;
@@ -78,10 +81,18 @@ class QuranAudioService extends ChangeNotifier {
     playerA.onPlayerComplete.listen((_) => _handleComplete(playerA));
     playerB.onPlayerComplete.listen((_) => _handleComplete(playerB));
     playerA.onPositionChanged.listen((p) {
-      if (playerA == _active) { position = p; notifyListeners(); }
+      if (playerA == _active) {
+        position = p;
+        notifyListeners();
+        _maybeAdvanceBeforeGap(p);
+      }
     });
     playerB.onPositionChanged.listen((p) {
-      if (playerB == _active) { position = p; notifyListeners(); }
+      if (playerB == _active) {
+        position = p;
+        notifyListeners();
+        _maybeAdvanceBeforeGap(p);
+      }
     });
     playerA.onDurationChanged.listen((d) {
       if (playerA == _active) { duration = d; notifyListeners(); }
@@ -95,6 +106,7 @@ class QuranAudioService extends ChangeNotifier {
 
   void _loadSurahContext(SurahModel surah, List<SurahModel> allSurahs) {
     _surahNumber = surah.number;
+    _surahName = surah.name;
     _totalAyahsInSurah = surah.ayahs.length;
     _surahAyahOffset = allSurahs
         .where((s) => s.number < surah.number)
@@ -251,6 +263,12 @@ class QuranAudioService extends ChangeNotifier {
     _standby = previousActive;
     _preloadedAyah = null;
 
+    // Stop the just-finished player before starting the preloaded one so
+    // the early hand-off never creates overlapping audio.
+    try {
+      await previousActive.stop();
+    } catch (_) {}
+
     playingAyah = nextAyah;
     notifyListeners();
 
@@ -265,8 +283,22 @@ class QuranAudioService extends ChangeNotifier {
     _preloadNext(nextAyah + 1);
   }
 
+  void _maybeAdvanceBeforeGap(Duration currentPosition) {
+    if (!playingWholeSurah || playingAyah == null || _advanceInProgress) return;
+    if (duration <= Duration.zero) return;
+    final nextAyah = playingAyah! + 1;
+    final effectiveEnd = _rangeEndAyah ?? _totalAyahsInSurah;
+    if (nextAyah > effectiveEnd || _preloadedAyah != nextAyah) return;
+    final remaining = duration - currentPosition;
+    if (remaining <= const Duration(milliseconds: 220)) {
+      _advanceInProgress = true;
+      _advanceSequential(nextAyah).whenComplete(() => _advanceInProgress = false);
+    }
+  }
+
   void _handleComplete(AudioPlayer source) {
     if (source != _active) return; // stray event from the preloading standby player
+    if (_advanceInProgress) return;
 
     if (repeatCurrent && playingAyah != null) {
       if (_consumeRepeatCredit()) {
@@ -296,6 +328,55 @@ class QuranAudioService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Changes the reciter without throwing away the current reading position.
+  /// If Quran playback is active, the same ayah is restarted with the new
+  /// reciter and seeks back to the exact position; whole-surah mode and pause
+  /// state are restored as well.
+  Future<void> changeReciter(
+    String reciterId, {
+    required SurahModel surah,
+    required List<SurahModel> allSurahs,
+  }) async {
+    if (reciterId == appSettings.reciterId) return;
+
+    final wasPlaying = playingAyah != null;
+    final savedAyah = playingAyah;
+    final savedPosition = position;
+    final savedWhole = playingWholeSurah;
+    final savedPaused = isPaused;
+    final savedRepeatCurrent = repeatCurrent;
+    final savedRepeatSurah = repeatSurah;
+    final savedRepeatCredits = repeatCreditsRemaining;
+
+    await stop();
+    await appSettings.setReciterId(reciterId);
+
+    if (!wasPlaying || savedAyah == null) return;
+
+    _ensureInit();
+    _loadSurahContext(surah, allSurahs);
+    playingWholeSurah = savedWhole;
+    repeatCurrent = savedRepeatCurrent;
+    repeatSurah = savedRepeatSurah;
+    repeatCreditsRemaining = savedRepeatCredits;
+    isPaused = false;
+    await _playAyahAudio(savedAyah);
+
+    if (savedPosition > Duration.zero && duration > Duration.zero) {
+      final safePosition = savedPosition <= duration ? savedPosition : duration;
+      await _active.seek(safePosition);
+      position = safePosition;
+    }
+    if (savedWhole) {
+      _preloadNext(savedAyah + 1);
+    }
+    if (savedPaused) {
+      await _active.pause();
+      isPaused = true;
+    }
+    notifyListeners();
+  }
+
   Future<void> stop() async {
     try {
       await _active.stop();
@@ -312,6 +393,8 @@ class QuranAudioService extends ChangeNotifier {
     isPaused = false;
     _rangeStartAyah = null;
     _rangeEndAyah = null;
+    _preloadedAyah = null;
+    _advanceInProgress = false;
     position = Duration.zero;
     duration = Duration.zero;
     notifyListeners();
