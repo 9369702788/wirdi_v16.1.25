@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Wirdi design tokens, per the Premium UI/UX Specification brief.
+/// Wirdi design tokens, aligned with the current emerald / gold / ivory
+/// visual identity reference.
 ///
-/// IMPORTANT: these stay literal `static const` emerald/gold values,
-/// deliberately UNCHANGED, even after [AppColorTheme] was added below.
+/// IMPORTANT: these remain stable theme tokens so existing screens can
+/// continue using AppColors directly while the global Material chrome
+/// adopts the same visual language.
 /// ~240 call sites across ~38 other screens reference
 /// AppColors.primaryEmerald / AppColors.goldAccent directly (not via
 /// Theme.of(context)) -- changing these into theme-aware values would
@@ -31,10 +33,10 @@ class AppColors {
 
   static Color get primaryEmerald => AppTheme.definitions[_currentTheme]!.primary;
   static Color get goldAccent => AppTheme.definitions[_currentTheme]!.accent;
-  static const lightBackground = Color(0xFFF8FAF6);
+  static const lightBackground = Color(0xFFF8F9F6);
   static const darkBackground = Color(0xFF071A17);
   static const darkCard = Color(0xFF102925);
-  static const mutedText = Color(0xFF64748B);
+  static const mutedText = Color(0xFF536763);
   static const tajweedQalqalah = Color(0xFFD2691E);
   static const tajweedGhunnah = Color(0xFFE91E8C);
   static const tajweedIkhfa = Color(0xFF5C6BC0);
@@ -43,10 +45,9 @@ class AppColors {
   static const tajweedIqlab = Color(0xFF8E24AA);
 }
 
-/// The set of selectable app-wide color themes. `emerald` reproduces
-/// the app's original look exactly (same values as [AppColors]) so
-/// existing users see zero visual change unless they deliberately pick
-/// a different theme.
+/// The set of selectable app-wide color themes. `emerald` is the
+/// app's primary Wirdi identity: deep emerald, muted teal, gold, and
+/// warm ivory, matching the supplied visual identity reference.
 enum AppColorTheme { emerald, ocean, ruby, amethyst, manuscript, classicQuran, sageCalm, warmSand, softBlue, pureMinimal }
 
 /// One theme's full visual identity: colors, card shape, and
@@ -98,11 +99,11 @@ class AppTheme {
         'ar': 'زمردي', 'en': 'Emerald', 'de': 'Smaragd', 'tr': 'Zümrüt',
         'fr': 'Émeraude', 'es': 'Esmeralda', 'id': 'Zamrud',
       },
-      primary: Color(0xFF0F5132),
-      accent: Color(0xFFD4AF7C),
-      lightBackground: Color(0xFFF7EBD3),
-      darkBackground: Color(0xFF2D3748),
-      darkCard: Color(0xFF374151),
+      primary: Color(0xFF0F766E),
+      accent: Color(0xFFD4AF37),
+      lightBackground: Color(0xFFF8F9F6),
+      darkBackground: Color(0xFF071A17),
+      darkCard: Color(0xFF102925),
       cardRadius: 20,
     ),
     AppColorTheme.ocean: AppThemeDefinition(
@@ -239,19 +240,20 @@ class AppTheme {
         surface: Colors.white,
       ),
       scaffoldBackgroundColor: def.lightBackground,
-      fontFamily: def.fontFamily ?? GoogleFonts.cairo().fontFamily,
+      fontFamily: def.fontFamily ?? GoogleFonts.tajawal().fontFamily,
     );
 
     return base.copyWith(
       appBarTheme: base.appBarTheme.copyWith(
-        backgroundColor: def.lightBackground,
-        foregroundColor: def.primary,
+        backgroundColor: def.primary,
+        foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
       ),
       cardTheme: base.cardTheme.copyWith(
         color: Colors.white,
-        elevation: 0,
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(def.cardRadius),
         ),
@@ -271,9 +273,9 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: def.primary,
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
           ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
@@ -294,7 +296,7 @@ class AppTheme {
         surface: def.darkCard,
       ),
       scaffoldBackgroundColor: def.darkBackground,
-      fontFamily: def.fontFamily ?? GoogleFonts.cairo().fontFamily,
+      fontFamily: def.fontFamily ?? GoogleFonts.tajawal().fontFamily,
     );
 
     return base.copyWith(
@@ -306,7 +308,8 @@ class AppTheme {
       ),
       cardTheme: base.cardTheme.copyWith(
         color: def.darkCard,
-        elevation: 0,
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(def.cardRadius),
         ),
@@ -322,9 +325,9 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: def.accent,
           foregroundColor: def.darkBackground,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
           ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
