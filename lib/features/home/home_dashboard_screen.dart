@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/verse_of_the_day_service.dart';
+import '../../core/services/quran_repository.dart';
 import '../../core/models/hadith_models.dart';
 import '../../core/services/hadith_repository.dart';
 import '../hadith/hadith_collection_screen.dart';
@@ -97,7 +98,22 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     final languageCode = Localizations.localeOf(context).languageCode;
     unawaited(_loadPrayer());
 
-    final lastReading = await UserProgressService.lastReading();
+    var lastReading = await UserProgressService.lastReading();
+    if (lastReading != null && (lastReading['surahName'] as String? ?? '').trim().isEmpty) {
+      try {
+        final surahs = await QuranRepository.load();
+        final number = lastReading['surahNumber'] as int?;
+        if (number != null) {
+          final match = surahs.firstWhere((s) => s.number == number, orElse: () => surahs.first);
+          lastReading = {...lastReading, 'surahName': match.name};
+          await UserProgressService.saveLastReading(
+            surahNumber: number,
+            surahName: match.name,
+            ayahNumber: lastReading['ayahNumber'] as int? ?? 1,
+          );
+        }
+      } catch (_) {}
+    }
     final favCount = await UserProgressService.totalFavoritesCount();
     final pagesToday = await UserProgressService.pagesReadToday();
     final target = await UserProgressService.dailyWirdTarget();
@@ -266,8 +282,17 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       appBar: AppBar(
         title: Text(l10n.appTitle),
         centerTitle: true,
+        backgroundColor: AppColors.darkBackground,
         foregroundColor: Colors.white,
-        flexibleSpace: _MosaicBg(col: 0, row: 0, opacity: 0.4),
+        flexibleSpace: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.darkBackground, AppColors.primaryEmerald],
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+            ),
+          ),
+        ),
         actions: [
           TextButton.icon(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const IslamicToolsScreen())),
@@ -283,33 +308,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       ),
       body: Stack(
         children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 700,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  image: const DecorationImage(
-                    image: AssetImage('assets/images/generated/mosque_sunrise.png'),
-                    fit: BoxFit.cover,
-                    alignment: Alignment.topCenter,
-                  ),
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.18),
-                      Colors.black.withValues(alpha: 0.52),
-                      Colors.transparent,
-                    ],
-                    stops: [0.0, 0.48, 1.0],
-                  ),
-                ),
-              ),
-            ),
-          ),
           RefreshIndicator(
         onRefresh: _loadAll,
         child: ListView(padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).padding.bottom),
@@ -472,17 +470,35 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrayerTimesScreen())),
               child: GestureDetector(
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrayerTimesScreen())),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.primaryEmerald, Color(0xFF115E56)],
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Image.asset(
+                        'assets/images/generated/mosque_sunrise.png',
+                        fit: BoxFit.cover,
+                        alignment: Alignment.topCenter,
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              AppColors.darkBackground.withValues(alpha: 0.78),
+                              AppColors.primaryEmerald.withValues(alpha: 0.78),
+                              AppColors.darkBackground.withValues(alpha: 0.58),
+                            ],
+                            begin: Alignment.topRight,
+                            end: Alignment.bottomLeft,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(l10n.homeNextPrayer, style: const TextStyle(color: Colors.white70)),
@@ -548,6 +564,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         width: 24,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
                       ),
+                      ],
+                    ),
+                  ),
                   ],
                 ),
               ),
@@ -725,8 +744,8 @@ class _DashboardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 0,
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.86),
+      elevation: 2,
+      color: Colors.white.withValues(alpha: 0.94),
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: InkWell(
