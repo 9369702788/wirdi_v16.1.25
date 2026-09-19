@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,7 +10,6 @@ import '../../core/services/azkar_repository.dart';
 import '../../core/services/user_progress_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../l10n/generated/app_localizations.dart';
-import '../../shared/widgets/wirdi_scenic_background.dart';
 
 class AzkarScreen extends StatefulWidget {
   const AzkarScreen({super.key});
@@ -52,6 +52,8 @@ class _AzkarScreenState extends State<AzkarScreen> with SingleTickerProviderStat
     final l10n = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
+        foregroundColor: Colors.white,
+        flexibleSpace: _MosaicBg(col: 2, row: 1, opacity: 0.4),
         title: Text(l10n.azkarDuasTitle),
         centerTitle: true,
         bottom: TabBar(
@@ -78,12 +80,20 @@ class _AzkarScreenState extends State<AzkarScreen> with SingleTickerProviderStat
           ),
         ],
       ),
-      body: WirdiScenicBackground(
-        asset: 'assets/images/ui/mosque_sunset.jpg',
-        height: 230,
-        child: SafeArea(bottom: true, top: false, child: FutureBuilder<List<AzkarCategoryModel>>(
-        future: _future,
-        builder: (context, snapshot) {
+      body: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.sizeOf(context).height * 0.45,
+            child: IgnorePointer(
+              child: _MosaicBg(col: 2, row: 1, opacity: 0.10),
+            ),
+          ),
+          SafeArea(bottom: true, top: false, child: FutureBuilder<List<AzkarCategoryModel>>(
+            future: _future,
+            builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -100,15 +110,16 @@ class _AzkarScreenState extends State<AzkarScreen> with SingleTickerProviderStat
           final azkarCategories = allCategories.where((c) => !_isDuaCategory(c)).toList();
           final duaCategories = allCategories.where(_isDuaCategory).toList();
 
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _buildCategoryList(azkarCategories, l10n),
-              _buildCategoryList(duaCategories, l10n),
-            ],
-          );
-        },
-      )),
+              return TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildCategoryList(azkarCategories, l10n),
+                  _buildCategoryList(duaCategories, l10n),
+                ],
+              );
+            },
+          )),
+        ],
       ),
     );
   }
@@ -436,7 +447,7 @@ class _AzkarFavoritesScreen extends StatelessWidget {
                     item.text,
                     textDirection: TextDirection.rtl,
                     textAlign: TextAlign.right,
-                    style: const TextStyle(fontSize: 17, height: 1.8),
+                    style: const TextStyle(fontSize: 17, height: 1.9, fontWeight: FontWeight.w500),
                   ),
                 ),
               );
@@ -473,4 +484,87 @@ class _ErrorView extends StatelessWidget {
       ),
     );
   }
+}
+
+
+class _MosaicBg extends StatefulWidget {
+  final int col; // 0-indexed, 0..4
+  final int row; // 0-indexed, 0..1
+  final double opacity;
+  const _MosaicBg({required this.col, required this.row, this.opacity = 0.4});
+
+  @override
+  State<_MosaicBg> createState() => _MosaicBgState();
+}
+
+class _MosaicBgState extends State<_MosaicBg> {
+  static ui.Image? _cachedImage;
+  ui.Image? _image;
+  ImageStreamListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cachedImage != null) {
+      _image = _cachedImage;
+    } else {
+      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+          .resolve(const ImageConfiguration());
+      _listener = ImageStreamListener((info, _) {
+        _cachedImage = info.image;
+        if (mounted) setState(() => _image = info.image);
+      });
+      stream.addListener(_listener!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = _image;
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (img != null)
+            CustomPaint(painter: _MosaicCellPainter(image: img, col: widget.col, row: widget.row))
+          else
+            Container(color: const Color(0xFF0F766E)),
+          Container(color: Colors.black.withValues(alpha: widget.opacity)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MosaicCellPainter extends CustomPainter {
+  final ui.Image image;
+  final int col;
+  final int row;
+  static const int cols = 5;
+  static const int rows = 2;
+  _MosaicCellPainter({required this.image, required this.col, required this.row});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cellW = image.width / cols;
+    final cellH = image.height / rows;
+    final srcAspect = cellW / cellH;
+    final dstAspect = size.width / size.height;
+    Rect src;
+    if (srcAspect > dstAspect) {
+      final visW = cellH * dstAspect;
+      final dx = (cellW - visW) / 2;
+      src = Rect.fromLTWH(col * cellW + dx, row * cellH, visW, cellH);
+    } else {
+      final visH = cellW / dstAspect;
+      final dy = (cellH - visH) / 2;
+      src = Rect.fromLTWH(col * cellW, row * cellH + dy, cellW, visH);
+    }
+    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawImageRect(image, src, dst, Paint()..filterQuality = FilterQuality.medium);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MosaicCellPainter oldDelegate) =>
+      oldDelegate.image != image || oldDelegate.col != col || oldDelegate.row != row;
 }

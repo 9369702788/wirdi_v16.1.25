@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -24,7 +25,7 @@ import '../../l10n/generated/app_localizations.dart';
 import '../mushaf/mushaf_view_screen.dart';
 import '../../core/services/bookmark_service.dart';
 import 'ayah_share_screen.dart';
-import '../../shared/widgets/wirdi_scenic_background.dart';
+import 'widgets/quran_playback_bar.dart';
 
 class QuranScreen extends StatefulWidget {
   /// If set, the screen opens directly into the reader for this surah,
@@ -88,7 +89,9 @@ class _QuranScreenState extends State<QuranScreen> with SingleTickerProviderStat
     final l10n = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.quranTitle),
+        foregroundColor: Colors.white,
+        flexibleSpace: _MosaicBg(col: 3, row: 0, opacity: 0.4),
+        title: Directionality(textDirection: TextDirection.rtl, child: Text(l10n.quranTitle)),
         centerTitle: true,
         actions: [
           IconButton(
@@ -103,6 +106,8 @@ class _QuranScreenState extends State<QuranScreen> with SingleTickerProviderStat
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
           tabs: [
             Tab(text: l10n.quranTabSurahs),
             Tab(text: l10n.quranTabJuz),
@@ -111,10 +116,7 @@ class _QuranScreenState extends State<QuranScreen> with SingleTickerProviderStat
           ],
         ),
       ),
-      body: WirdiScenicBackground(
-        asset: 'assets/images/ui/quran_mosque.jpg',
-        height: 240,
-        child: FutureBuilder<List<SurahModel>>(
+      body: FutureBuilder<List<SurahModel>>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
@@ -143,7 +145,6 @@ class _QuranScreenState extends State<QuranScreen> with SingleTickerProviderStat
           );
         },
       ),
-      ),
     );
   }
 }
@@ -169,80 +170,83 @@ class _SurahListTabState extends State<_SurahListTab> {
           surah.englishName.toLowerCase().contains(query.toLowerCase());
     }).toList();
 
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(l10n.quranViewMode, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-              ),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  try {
-                    await MushafRepository.load();
-                    if (!context.mounted) return;
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const MushafViewScreen(initialPage: 1)),
-                    );
-                  } catch (_) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(l10n.quranMushafPagesLoadError)),
+        if (!isLandscape) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(l10n.quranViewMode, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    try {
+                      await MushafRepository.load();
+                      if (!context.mounted) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const MushafViewScreen(initialPage: 1)),
                       );
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(l10n.quranMushafPagesLoadError)),
+                        );
+                      }
                     }
-                  }
-                },
-                icon: const Icon(Icons.import_contacts_outlined, size: 18),
-                label: Text(l10n.quranViewAsMushafPages),
-              ),
-            ],
+                  },
+                  icon: const Icon(Icons.import_contacts_outlined, size: 18),
+                  label: Text(l10n.quranViewAsMushafPages),
+                ),
+              ],
+            ),
           ),
-        ),
-        FutureBuilder<double>(
-          future: UserProgressService.quranCompletionRatio(),
-          builder: (context, snapshot) {
-            final ratio = snapshot.data ?? 0.0;
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Semantics(
-                label: l10n.quranCompletionPercent((ratio * 100).round()),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(16)),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(l10n.quranKhatmaProgress, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                            const SizedBox(height: 6),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: ratio,
-                                minHeight: 6,
-                                backgroundColor: AppColors.primaryEmerald.withValues(alpha: 0.1),
-                                valueColor: AlwaysStoppedAnimation(AppColors.primaryEmerald),
+          FutureBuilder<double>(
+            future: UserProgressService.quranCompletionRatio(),
+            builder: (context, snapshot) {
+              final ratio = snapshot.data ?? 0.0;
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Semantics(
+                  label: l10n.quranCompletionPercent((ratio * 100).round()),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(16)),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(l10n.quranKhatmaProgress, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                              const SizedBox(height: 6),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: ratio,
+                                  minHeight: 6,
+                                  backgroundColor: AppColors.primaryEmerald.withValues(alpha: 0.1),
+                                  valueColor: AlwaysStoppedAnimation(AppColors.primaryEmerald),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text('${(ratio * 100).round()}%', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.primaryEmerald)),
-                    ],
+                        const SizedBox(width: 12),
+                        Text('${(ratio * 100).round()}%', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.primaryEmerald)),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        ),
+              );
+            },
+          ),
+        ],
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: EdgeInsets.fromLTRB(16, isLandscape ? 6 : 12, 16, isLandscape ? 4 : 8),
           child: TextField(
             controller: widget.controller,
             decoration: InputDecoration(
@@ -250,6 +254,7 @@ class _SurahListTabState extends State<_SurahListTab> {
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: Theme.of(context).cardColor,
+              contentPadding: isLandscape ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8) : null,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
             ),
             onChanged: (_) => setState(() {}),
@@ -268,7 +273,7 @@ class _SurahListTabState extends State<_SurahListTab> {
                     backgroundColor: AppColors.primaryEmerald.withValues(alpha: 0.12),
                     child: Text('${surah.number}', style: const TextStyle(color: Color(0xFF0F766E), fontWeight: FontWeight.bold)),
                   ),
-                  title: Text(surah.name, textAlign: TextAlign.right, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                  title: Text(surah.name, textAlign: TextAlign.right, style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 22, fontWeight: FontWeight.w700)),
                   subtitle: Text(l10n.quranSurahSubtitle(surah.englishName, surah.ayahs.length), textAlign: TextAlign.right),
                   trailing: const Icon(Icons.menu_book),
                   onTap: () => Navigator.push(
@@ -702,47 +707,12 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
   /// number, it's further up (search the lower half). This doesn't
   /// depend on guessing item height at all.
   Future<void> _scrollToAyah(int ayahNumber) async {
-    if (_tryEnsureVisible(ayahNumber)) return;
-    if (!_scrollController.hasClients) return;
-
-    var low = 0.0;
-    var high = _scrollController.position.maxScrollExtent;
-
-    for (var attempt = 0; attempt < 18; attempt++) {
+    if (!mounted) return;
+    for (var attempt = 0; attempt < 12; attempt++) {
       if (!mounted) return;
-      final mid = (low + high) / 2;
-      _scrollController.jumpTo(mid);
-      await Future.delayed(const Duration(milliseconds: 55));
-      if (!mounted) return;
-
+      await WidgetsBinding.instance.endOfFrame;
       if (_tryEnsureVisible(ayahNumber)) return;
-
-      final builtNearby = _ayahKeys.entries
-          .where((e) => e.value.currentContext != null)
-          .map((e) => e.key)
-          .toList();
-
-      if (builtNearby.isEmpty) {
-        // Nothing built yet at all (shouldn't normally happen this
-        // early) — narrow slightly and try again.
-        high = mid;
-        continue;
-      }
-
-      final anyBelowTarget = builtNearby.any((n) => n < ayahNumber);
-      final anyAboveTarget = builtNearby.any((n) => n > ayahNumber);
-
-      if (anyBelowTarget && !anyAboveTarget) {
-        low = mid; // target is further down the list
-      } else if (anyAboveTarget && !anyBelowTarget) {
-        high = mid; // target is further up the list
-      } else {
-        // Mixed (target's neighborhood is likely already built) or a
-        // razor-thin remaining range — one more direct check and stop
-        // narrowing further either way.
-        if (_tryEnsureVisible(ayahNumber)) return;
-        if ((high - low).abs() < 2) return;
-      }
+      await Future.delayed(const Duration(milliseconds: 50));
     }
   }
 
@@ -758,12 +728,27 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
 
   Future<void> _openMushafView() async {
     try {
-      await MushafRepository.load();
-      final startPage = MushafRepository.firstPageForSurah(await MushafRepository.load(), widget.surah.number) ?? 1;
+      final pages = await MushafRepository.load();
+      var startPage = MushafRepository.firstPageForSurah(pages, widget.surah.number) ?? 1;
+      final targetAyah = _lastKnownPlayingAyah ?? widget.scrollToAyah;
+      if (targetAyah != null) {
+        for (final page in pages) {
+          if (page.ayahs.any((a) => a.surahNumber == widget.surah.number && a.ayahNumber == targetAyah)) {
+            startPage = page.pageNumber;
+            break;
+          }
+        }
+      }
       if (!mounted) return;
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => MushafViewScreen(initialPage: startPage)),
+        MaterialPageRoute(
+          builder: (_) => MushafViewScreen(
+            initialPage: startPage,
+            initialSurahNumber: widget.surah.number,
+            initialAyah: targetAyah,
+          ),
+        ),
       );
     } catch (e, st) {
       AppLogger.error('Failed to open mushaf view', error: e, stackTrace: st);
@@ -864,6 +849,39 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
     }
 
     setState(() => _expandedTafsirAyahs.add(ayahNumber));
+  }
+
+  Future<void> _showPlaybackSpeedPicker() async {
+    final isAr = languageCode == 'ar';
+    final selected = await showModalBottomSheet<double>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  isAr ? 'سرعة التلاوة' : 'Playback speed',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            for (final rate in const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0])
+              ListTile(
+                title: Text('${rate}x'),
+                trailing: quranAudio.playbackRate == rate ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(sheetContext, rate),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    await quranAudio.setSpeed(selected);
   }
 
   Future<void> _bookmark(int ayahNumber) async {
@@ -1002,68 +1020,98 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.quranSurahAppBarTitle(surah.name)),
+        title: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Text(l10n.quranSurahAppBarTitle(surah.name)),
+        ),
         centerTitle: true,
         actions: [
-          _DownloadButton(surah: surah, allSurahs: widget.allSurahs),
-          IconButton(
-            tooltip: l10n.quranViewAsMushafPageTooltip,
-            onPressed: _openMushafView,
-            icon: const Icon(Icons.import_contacts_outlined),
-          ),
+          if (MediaQuery.of(context).orientation != Orientation.landscape) ...[
+            IconButton(
+              tooltip: languageCode == 'ar' ? 'السورة السابقة' : 'Previous surah',
+              onPressed: surah.number > 1
+                  ? () {
+                      final prevSurah = widget.allSurahs.firstWhere((s) => s.number == surah.number - 1, orElse: () => surah);
+                      if (prevSurah.number != surah.number) {
+                        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => SurahReaderScreen(surah: prevSurah, allSurahs: widget.allSurahs)));
+                      }
+                    }
+                  : null,
+              icon: const Icon(Icons.skip_previous_rounded),
+            ),
+            IconButton(
+              tooltip: languageCode == 'ar' ? 'السورة التالية' : 'Next surah',
+              onPressed: surah.number < 114
+                  ? () {
+                      final nextSurah = widget.allSurahs.firstWhere((s) => s.number == surah.number + 1, orElse: () => surah);
+                      if (nextSurah.number != surah.number) {
+                        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => SurahReaderScreen(surah: nextSurah, allSurahs: widget.allSurahs)));
+                      }
+                    }
+                  : null,
+              icon: const Icon(Icons.skip_next_rounded),
+            ),
+            _DownloadButton(surah: surah, allSurahs: widget.allSurahs),
+            IconButton(
+              tooltip: l10n.quranViewAsMushafPageTooltip,
+              onPressed: _openMushafView,
+              icon: const Icon(Icons.import_contacts_outlined),
+            ),
+          ] else ...[
+            _DownloadButton(surah: surah, allSurahs: widget.allSurahs),
+          ],
           PopupMenuButton<String>(
             tooltip: l10n.navMore,
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
-              if (value == 'reciter') {
+              if (value == 'prev' && surah.number > 1) {
+                final prevSurah = widget.allSurahs.firstWhere((s) => s.number == surah.number - 1, orElse: () => surah);
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => SurahReaderScreen(surah: prevSurah, allSurahs: widget.allSurahs)));
+              } else if (value == 'next' && surah.number < 114) {
+                final nextSurah = widget.allSurahs.firstWhere((s) => s.number == surah.number + 1, orElse: () => surah);
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => SurahReaderScreen(surah: nextSurah, allSurahs: widget.allSurahs)));
+              } else if (value == 'mushaf') {
+                _openMushafView();
+              } else if (value == 'reciter') {
                 _pickReciter();
               } else if (value == 'fontDec') {
                 setState(() => _fontScale = (_fontScale - 0.1).clamp(0.7, 1.6));
               } else if (value == 'fontInc') {
                 setState(() => _fontScale = (_fontScale + 0.1).clamp(0.7, 1.6));
+              } else if (value == 'speed') {
+                _showPlaybackSpeedPicker();
+              } else if (value == 'repeatSurah') {
+                quranAudio.toggleRepeatSurah();
               } else if (value == 'wird') {
                 _markSurahReadToday();
               }
             },
             itemBuilder: (context) => [
+              if (MediaQuery.of(context).orientation == Orientation.landscape && surah.number > 1) PopupMenuItem(value: 'prev', child: Text(languageCode == 'ar' ? 'السورة السابقة' : 'Previous surah')),
+              if (MediaQuery.of(context).orientation == Orientation.landscape && surah.number < 114) PopupMenuItem(value: 'next', child: Text(languageCode == 'ar' ? 'السورة التالية' : 'Next surah')),
+              if (MediaQuery.of(context).orientation == Orientation.landscape) PopupMenuItem(value: 'mushaf', child: Text(l10n.quranViewAsMushafPageTooltip)),
+              PopupMenuItem(value: 'reciter', child: Text(l10n.quranChooseReciterTooltip(Reciters.byId(appSettings.reciterId).displayNameFor(languageCode)))),
+              PopupMenuItem(value: 'fontDec', child: Text(l10n.quranDecreaseFontTooltip)),
+              PopupMenuItem(value: 'fontInc', child: Text(l10n.quranIncreaseFontTooltip)),
               PopupMenuItem(
-                value: 'reciter',
-                child: Row(children: [
-                  const Icon(Icons.record_voice_over_outlined, size: 20),
-                  const SizedBox(width: 10),
-                  Flexible(child: Text(l10n.quranChooseReciterTooltip(Reciters.byId(appSettings.reciterId).displayNameFor(languageCode)))),
-                ]),
+                value: 'speed',
+                child: Text(languageCode == 'ar' ? 'سرعة التلاوة (${quranAudio.playbackRate}x)' : 'Playback speed (${quranAudio.playbackRate}x)'),
               ),
               PopupMenuItem(
-                value: 'fontDec',
-                child: Row(children: [
-                  const Icon(Icons.text_decrease, size: 20),
-                  const SizedBox(width: 10),
-                  Text(l10n.quranDecreaseFontTooltip),
-                ]),
+                value: 'repeatSurah',
+                child: Text(languageCode == 'ar'
+                    ? (quranAudio.repeatSurah ? 'إيقاف تكرار السورة' : 'تكرار السورة')
+                    : (quranAudio.repeatSurah ? 'Stop repeating surah' : 'Repeat surah')),
               ),
-              PopupMenuItem(
-                value: 'fontInc',
-                child: Row(children: [
-                  const Icon(Icons.text_increase, size: 20),
-                  const SizedBox(width: 10),
-                  Text(l10n.quranIncreaseFontTooltip),
-                ]),
-              ),
-              PopupMenuItem(
-                value: 'wird',
-                child: Row(children: [
-                  const Icon(Icons.playlist_add_check, size: 20),
-                  const SizedBox(width: 10),
-                  Text(l10n.quranAddToWirdTooltip),
-                ]),
-              ),
+              PopupMenuItem(value: 'wird', child: Text(l10n.quranAddToWirdTooltip)),
             ],
           ),
         ],
       ),
+      bottomNavigationBar: const QuranPlaybackBar(),
       body: ListView.builder(
         controller: _scrollController,
+        cacheExtent: 1000000,
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
         itemCount: surah.ayahs.length + 1,
         itemBuilder: (context, index) {
@@ -1380,4 +1428,86 @@ class _DownloadButtonState extends State<_DownloadButton> {
       ),
     );
   }
+}
+
+class _MosaicBg extends StatefulWidget {
+  final int col; // 0-indexed, 0..4
+  final int row; // 0-indexed, 0..1
+  final double opacity;
+  const _MosaicBg({required this.col, required this.row, this.opacity = 0.4});
+
+  @override
+  State<_MosaicBg> createState() => _MosaicBgState();
+}
+
+class _MosaicBgState extends State<_MosaicBg> {
+  static ui.Image? _cachedImage;
+  ui.Image? _image;
+  ImageStreamListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cachedImage != null) {
+      _image = _cachedImage;
+    } else {
+      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+          .resolve(const ImageConfiguration());
+      _listener = ImageStreamListener((info, _) {
+        _cachedImage = info.image;
+        if (mounted) setState(() => _image = info.image);
+      });
+      stream.addListener(_listener!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = _image;
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (img != null)
+            CustomPaint(painter: _MosaicCellPainter(image: img, col: widget.col, row: widget.row))
+          else
+            Container(color: const Color(0xFF0F766E)),
+          Container(color: Colors.black.withValues(alpha: widget.opacity)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MosaicCellPainter extends CustomPainter {
+  final ui.Image image;
+  final int col;
+  final int row;
+  static const int cols = 5;
+  static const int rows = 2;
+  _MosaicCellPainter({required this.image, required this.col, required this.row});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cellW = image.width / cols;
+    final cellH = image.height / rows;
+    final srcAspect = cellW / cellH;
+    final dstAspect = size.width / size.height;
+    Rect src;
+    if (srcAspect > dstAspect) {
+      final visW = cellH * dstAspect;
+      final dx = (cellW - visW) / 2;
+      src = Rect.fromLTWH(col * cellW + dx, row * cellH, visW, cellH);
+    } else {
+      final visH = cellW / dstAspect;
+      final dy = (cellH - visH) / 2;
+      src = Rect.fromLTWH(col * cellW, row * cellH + dy, cellW, visH);
+    }
+    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawImageRect(image, src, dst, Paint()..filterQuality = FilterQuality.medium);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MosaicCellPainter oldDelegate) =>
+      oldDelegate.image != image || oldDelegate.col != col || oldDelegate.row != row;
 }

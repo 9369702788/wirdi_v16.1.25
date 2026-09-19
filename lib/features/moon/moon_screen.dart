@@ -1,10 +1,10 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../core/services/moon_calculator.dart';
 import '../../core/services/moon_phases_service.dart';
 import '../../core/services/moon_sighting_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../shared/widgets/wirdi_scenic_background.dart';
 
 class MoonScreen extends StatefulWidget {
   const MoonScreen({super.key});
@@ -42,11 +42,13 @@ class _MoonScreenState extends State<MoonScreen> {
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final sighting = _sighting;
     return Scaffold(
-      appBar: AppBar(title: Text(isAr ? 'القمر وأطواره' : 'Moon Phase'), centerTitle: true),
-      body: WirdiScenicBackground(
-        asset: 'assets/images/ui/moon_night.jpg',
-        height: 300,
-        child: _loading
+      appBar: AppBar(
+        foregroundColor: Colors.white,
+        flexibleSpace: _MosaicBg(col: 1, row: 1, opacity: 0.5),
+        title: Text(isAr ? 'القمر وأطواره' : 'Moon Phase'),
+        centerTitle: true,
+      ),
+      body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
@@ -56,16 +58,16 @@ class _MoonScreenState extends State<MoonScreen> {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.primaryEmerald, const Color(0xFF115E56)]), borderRadius: BorderRadius.circular(16)),
                   child: Column(children: [
-                    Text(isAr ? 'طور القمر اليوم' : "Today's Moon Phase", style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                    const SizedBox(height: 10),
+                    Text(isAr ? 'طور القمر اليوم' : "Today's Moon Phase", style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    const SizedBox(height: 12),
                     if (sighting != null)
                       SizedBox(
-                        width: 96,
-                        height: 96,
+                        width: 220,
+                        height: 220,
                         child: MoonPhaseIcon(ageDays: sighting.ageDays, illumination: sighting.illumination, isWaxing: sighting.isWaxing),
                       ),
-                    const SizedBox(height: 10),
-                    Text(sighting?.description ?? '', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 15)),
+                    const SizedBox(height: 12),
+                    Text(sighting?.description ?? '', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                   ]),
                 ),
                 const SizedBox(height: 12),
@@ -94,7 +96,6 @@ class _MoonScreenState extends State<MoonScreen> {
                     ),
               ],
             ),
-      ),
     );
   }
 }
@@ -182,4 +183,87 @@ class _MoonPhasePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _MoonPhasePainter oldDelegate) =>
       oldDelegate.illumination != illumination || oldDelegate.isWaxing != isWaxing;
+}
+
+
+class _MosaicBg extends StatefulWidget {
+  final int col; // 0-indexed, 0..4
+  final int row; // 0-indexed, 0..1
+  final double opacity;
+  const _MosaicBg({required this.col, required this.row, this.opacity = 0.4});
+
+  @override
+  State<_MosaicBg> createState() => _MosaicBgState();
+}
+
+class _MosaicBgState extends State<_MosaicBg> {
+  static ui.Image? _cachedImage;
+  ui.Image? _image;
+  ImageStreamListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cachedImage != null) {
+      _image = _cachedImage;
+    } else {
+      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+          .resolve(const ImageConfiguration());
+      _listener = ImageStreamListener((info, _) {
+        _cachedImage = info.image;
+        if (mounted) setState(() => _image = info.image);
+      });
+      stream.addListener(_listener!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = _image;
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (img != null)
+            CustomPaint(painter: _MosaicCellPainter(image: img, col: widget.col, row: widget.row))
+          else
+            Container(color: const Color(0xFF0F766E)),
+          Container(color: Colors.black.withValues(alpha: widget.opacity)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MosaicCellPainter extends CustomPainter {
+  final ui.Image image;
+  final int col;
+  final int row;
+  static const int cols = 5;
+  static const int rows = 2;
+  _MosaicCellPainter({required this.image, required this.col, required this.row});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cellW = image.width / cols;
+    final cellH = image.height / rows;
+    final srcAspect = cellW / cellH;
+    final dstAspect = size.width / size.height;
+    Rect src;
+    if (srcAspect > dstAspect) {
+      final visW = cellH * dstAspect;
+      final dx = (cellW - visW) / 2;
+      src = Rect.fromLTWH(col * cellW + dx, row * cellH, visW, cellH);
+    } else {
+      final visH = cellW / dstAspect;
+      final dy = (cellH - visH) / 2;
+      src = Rect.fromLTWH(col * cellW, row * cellH + dy, cellW, visH);
+    }
+    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawImageRect(image, src, dst, Paint()..filterQuality = FilterQuality.medium);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MosaicCellPainter oldDelegate) =>
+      oldDelegate.image != image || oldDelegate.col != col || oldDelegate.row != row;
 }

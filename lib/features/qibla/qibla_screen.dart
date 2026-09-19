@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_compass_v2/flutter_compass_v2.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,7 +10,6 @@ import '../../core/services/qibla_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../l10n/generated/app_localizations.dart';
 import 'qibla_camera_screen.dart';
-import '../../shared/widgets/wirdi_scenic_background.dart';
 
 enum _QiblaStatus { loading, locationServiceDisabled, permissionDenied, error, ready }
 
@@ -101,6 +101,8 @@ class _QiblaScreenState extends State<QiblaScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        foregroundColor: Colors.white,
+        flexibleSpace: _MosaicBg(col: 0, row: 1, opacity: 0.4),
         title: Text(l10n.qiblaTitle),
         centerTitle: true,
         actions: [
@@ -111,11 +113,7 @@ class _QiblaScreenState extends State<QiblaScreen> {
           ),
         ],
       ),
-      body: WirdiScenicBackground(
-        asset: 'assets/images/ui/kaaba_night.jpg',
-        height: 270,
-        child: _buildBody(l10n),
-      ),
+      body: _buildBody(l10n),
     );
   }
 
@@ -335,4 +333,87 @@ class _StatusView extends StatelessWidget {
       ),
     );
   }
+}
+
+
+class _MosaicBg extends StatefulWidget {
+  final int col; // 0-indexed, 0..4
+  final int row; // 0-indexed, 0..1
+  final double opacity;
+  const _MosaicBg({required this.col, required this.row, this.opacity = 0.4});
+
+  @override
+  State<_MosaicBg> createState() => _MosaicBgState();
+}
+
+class _MosaicBgState extends State<_MosaicBg> {
+  static ui.Image? _cachedImage;
+  ui.Image? _image;
+  ImageStreamListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cachedImage != null) {
+      _image = _cachedImage;
+    } else {
+      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+          .resolve(const ImageConfiguration());
+      _listener = ImageStreamListener((info, _) {
+        _cachedImage = info.image;
+        if (mounted) setState(() => _image = info.image);
+      });
+      stream.addListener(_listener!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = _image;
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (img != null)
+            CustomPaint(painter: _MosaicCellPainter(image: img, col: widget.col, row: widget.row))
+          else
+            Container(color: const Color(0xFF0F766E)),
+          Container(color: Colors.black.withValues(alpha: widget.opacity)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MosaicCellPainter extends CustomPainter {
+  final ui.Image image;
+  final int col;
+  final int row;
+  static const int cols = 5;
+  static const int rows = 2;
+  _MosaicCellPainter({required this.image, required this.col, required this.row});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cellW = image.width / cols;
+    final cellH = image.height / rows;
+    final srcAspect = cellW / cellH;
+    final dstAspect = size.width / size.height;
+    Rect src;
+    if (srcAspect > dstAspect) {
+      final visW = cellH * dstAspect;
+      final dx = (cellW - visW) / 2;
+      src = Rect.fromLTWH(col * cellW + dx, row * cellH, visW, cellH);
+    } else {
+      final visH = cellW / dstAspect;
+      final dy = (cellH - visH) / 2;
+      src = Rect.fromLTWH(col * cellW, row * cellH + dy, cellW, visH);
+    }
+    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawImageRect(image, src, dst, Paint()..filterQuality = FilterQuality.medium);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MosaicCellPainter oldDelegate) =>
+      oldDelegate.image != image || oldDelegate.col != col || oldDelegate.row != row;
 }

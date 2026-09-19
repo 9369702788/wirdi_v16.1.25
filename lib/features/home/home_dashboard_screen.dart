@@ -5,6 +5,7 @@ import '../../core/services/verse_of_the_day_service.dart';
 import '../../core/models/hadith_models.dart';
 import '../../core/services/hadith_repository.dart';
 import '../hadith/hadith_collection_screen.dart';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
@@ -36,7 +37,6 @@ import '../settings/settings_screen.dart';
 import '../tasbeeh/tasbeeh_screen.dart';
 import '../tools/islamic_tools_screen.dart';
 import '../wird/my_wirdi_screen.dart';
-import '../../shared/widgets/wirdi_scenic_background.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -266,11 +266,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       appBar: AppBar(
         title: Text(l10n.appTitle),
         centerTitle: true,
+        foregroundColor: Colors.white,
+        flexibleSpace: _MosaicBg(col: 0, row: 0, opacity: 0.4),
         actions: [
-          IconButton(
-            tooltip: l10n.homeIslamicTools,
-            icon: const Icon(Icons.apps_outlined),
+          TextButton.icon(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const IslamicToolsScreen())),
+            icon: const Icon(Icons.apps_outlined, color: Colors.white),
+            label: Text(l10n.homeIslamicTools, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
           ),
           IconButton(
             tooltip: l10n.commonSettingsTooltip,
@@ -279,11 +281,37 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           ),
         ],
       ),
-      body: WirdiScenicBackground(
-        asset: 'assets/images/ui/home_scenery.jpg',
-        height: 310,
-        child: RefreshIndicator(
-          onRefresh: _loadAll,
+      body: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 700,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  image: const DecorationImage(
+                    image: AssetImage('assets/images/generated/mosque_sunrise.png'),
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                  ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.18),
+                      Colors.black.withValues(alpha: 0.52),
+                      Colors.transparent,
+                    ],
+                    stops: [0.0, 0.48, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          RefreshIndicator(
+        onRefresh: _loadAll,
         child: ListView(padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).padding.bottom),
           children: [
             Text(_greeting(l10n), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
@@ -447,17 +475,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  image: const DecorationImage(
-                    image: AssetImage('assets/images/ui/mosque_sunset.jpg'),
-                    fit: BoxFit.cover,
-                    colorFilter: ColorFilter.mode(Colors.black54, BlendMode.darken),
-                  ),
                   gradient: LinearGradient(
                     colors: [AppColors.primaryEmerald, Color(0xFF115E56)],
                     begin: Alignment.topRight,
                     end: Alignment.bottomLeft,
                   ),
+                  borderRadius: BorderRadius.circular(24),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -474,10 +497,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                           ClipOval(
                             child: Image.asset(
                               moonImageAsset,
-                              width: 22,
-                              height: 22,
+                              width: 40,
+                              height: 40,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => const Icon(Icons.circle, size: 22, color: Colors.white54),
+                              errorBuilder: (context, error, stackTrace) => const Icon(Icons.circle, size: 40, color: Colors.white54),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -604,8 +627,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               icon: Icons.menu_book_outlined,
               title: l10n.localeName == 'ar' ? 'آية اليوم' : 'Verse of the Day',
               subtitle: '${VerseOfTheDayService.forToday().arabicText}\n${VerseOfTheDayService.forToday().surahName} - ${VerseOfTheDayService.forToday().ayahNumber}',
-              trailing: const SizedBox.shrink(),
-              onTap: null,
+              trailing: const Icon(Icons.chevron_left, color: AppColors.mutedText),
+              onTap: () {
+                final verse = VerseOfTheDayService.forToday();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => QuranScreen(initialSurahNumber: verse.surahNumber, initialAyah: verse.ayahNumber)),
+                );
+              },
             ),
             if (_hadithOfToday != null) ...[
               const SizedBox(height: 12),
@@ -669,13 +698,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ],
             ),
           ],
-        ),
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
-
 class _DashboardCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -697,6 +726,8 @@ class _DashboardCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.86),
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
@@ -893,4 +924,86 @@ class _QuickAction extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MosaicBg extends StatefulWidget {
+  final int col; // 0-indexed, 0..4
+  final int row; // 0-indexed, 0..1
+  final double opacity;
+  const _MosaicBg({required this.col, required this.row, this.opacity = 0.4});
+
+  @override
+  State<_MosaicBg> createState() => _MosaicBgState();
+}
+
+class _MosaicBgState extends State<_MosaicBg> {
+  static ui.Image? _cachedImage;
+  ui.Image? _image;
+  ImageStreamListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cachedImage != null) {
+      _image = _cachedImage;
+    } else {
+      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+          .resolve(const ImageConfiguration());
+      _listener = ImageStreamListener((info, _) {
+        _cachedImage = info.image;
+        if (mounted) setState(() => _image = info.image);
+      });
+      stream.addListener(_listener!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = _image;
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (img != null)
+            CustomPaint(painter: _MosaicCellPainter(image: img, col: widget.col, row: widget.row))
+          else
+            Container(color: const Color(0xFF0F766E)),
+          Container(color: Colors.black.withValues(alpha: widget.opacity)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MosaicCellPainter extends CustomPainter {
+  final ui.Image image;
+  final int col;
+  final int row;
+  static const int cols = 5;
+  static const int rows = 2;
+  _MosaicCellPainter({required this.image, required this.col, required this.row});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cellW = image.width / cols;
+    final cellH = image.height / rows;
+    final srcAspect = cellW / cellH;
+    final dstAspect = size.width / size.height;
+    Rect src;
+    if (srcAspect > dstAspect) {
+      final visW = cellH * dstAspect;
+      final dx = (cellW - visW) / 2;
+      src = Rect.fromLTWH(col * cellW + dx, row * cellH, visW, cellH);
+    } else {
+      final visH = cellW / dstAspect;
+      final dy = (cellH - visH) / 2;
+      src = Rect.fromLTWH(col * cellW, row * cellH + dy, cellW, visH);
+    }
+    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawImageRect(image, src, dst, Paint()..filterQuality = FilterQuality.medium);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MosaicCellPainter oldDelegate) =>
+      oldDelegate.image != image || oldDelegate.col != col || oldDelegate.row != row;
 }

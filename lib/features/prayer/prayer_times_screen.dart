@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'dart:ui' as ui;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,7 +20,6 @@ import '../../core/services/weather_service.dart';
 import '../../core/services/sunrise_sunset_calculator.dart';
 import 'package:geolocator/geolocator.dart';
 import 'prayer_chart_screen.dart';
-import '../../shared/widgets/wirdi_scenic_background.dart';
 
 class PrayerTimesScreen extends StatefulWidget {
   const PrayerTimesScreen({super.key});
@@ -315,10 +315,7 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
     if (_availabilityError != null) {
       return Scaffold(
         appBar: AppBar(title: Text(l10n.prayerTimesTitle), centerTitle: true),
-        body: WirdiScenicBackground(
-        asset: 'assets/images/ui/mosque_sunset.jpg',
-        height: 250,
-        child: Center(
+        body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -340,7 +337,6 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
             ),
           ),
         ),
-      ),
       );
     }
 
@@ -352,6 +348,8 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        foregroundColor: Colors.white,
+        flexibleSpace: _MosaicBg(col: 4, row: 0, opacity: 0.4),
         title: Text(l10n.prayerTimesTitle),
         centerTitle: true,
         actions: [
@@ -501,21 +499,38 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
                 const SizedBox(height: 6),
                 Text(l10n.prayerTimeRemaining, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ClipOval(
-                      child: Image.asset(
-                        moonImageAsset,
-                        width: 26,
-                        height: 26,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const Icon(Icons.circle, size: 26, color: Colors.white54),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(moonPhaseName, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final moonSize = (constraints.maxWidth * 0.78).clamp(180.0, 250.0).toDouble();
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ClipOval(
+                          child: Image.asset(
+                            moonImageAsset,
+                            width: moonSize,
+                            height: moonSize,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Icon(Icons.circle, size: moonSize, color: Colors.white54),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white30),
+                          ),
+                          child: Text(
+                            moonPhaseName,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 if (_weather != null || _sunTimes != null) ...[
                   const SizedBox(height: 18),
@@ -563,16 +578,46 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
                 leading: Icon(Icons.mosque_outlined, color: isNext ? AppColors.primaryEmerald : AppColors.mutedText),
                 title: Text(displayName, style: TextStyle(fontWeight: isNext ? FontWeight.bold : FontWeight.w600)),
                 subtitle: Text(_calibratedTimeText(prayer), style: TextStyle(fontWeight: FontWeight.bold, color: isNext ? AppColors.primaryEmerald : null)),
-                trailing: Semantics(
-                  button: hasPassed,
-                  label: !hasPassed
-                      ? l10n.prayerNotYetDue(displayName)
-                      : (isPrayed ? l10n.prayerMarkedDone(displayName) : l10n.prayerNotDoneYet(displayName)),
-                  child: Checkbox(
-                    value: isPrayed,
-                    activeColor: AppColors.primaryEmerald,
-                    onChanged: hasPassed ? (_) => _togglePrayed(prayer.name) : null,
-                  ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PopupMenuButton<String>(
+                      tooltip: isAr ? 'إعداد إشعار الصلاة' : 'Prayer notification',
+                      icon: Icon(
+                        appSettings.isPrayerReminderEnabledFor(prayer.name)
+                            ? Icons.notifications_active_outlined
+                            : Icons.notifications_off_outlined,
+                        color: appSettings.isPrayerReminderEnabledFor(prayer.name) ? AppColors.primaryEmerald : AppColors.mutedText,
+                      ),
+                      onSelected: (mode) async {
+                        if (mode == 'off') {
+                          await appSettings.setPrayerReminderEnabledFor(prayer.name, false);
+                        } else {
+                          await appSettings.setPrayerReminderEnabledFor(prayer.name, true);
+                          await appSettings.setPrayerSoundOverrideFor(prayer.name, mode);
+                        }
+                        if (mounted) setState(() {});
+                        if (mounted) unawaited(PrayerNotificationScheduler.rescheduleFromResult(context, result));
+                      },
+                      itemBuilder: (_) => [
+                        PopupMenuItem(value: 'off', child: Text(isAr ? 'إيقاف الإشعار' : 'Notifications off')),
+                        PopupMenuItem(value: 'adhan', child: Text(isAr ? 'أذان' : 'Adhan')),
+                        PopupMenuItem(value: 'beep', child: Text(isAr ? 'تنبيه صوتي' : 'Sound alert')),
+                        PopupMenuItem(value: 'banner', child: Text(isAr ? 'إشعار فقط' : 'Notification only')),
+                      ],
+                    ),
+                    Semantics(
+                      button: hasPassed,
+                      label: !hasPassed
+                          ? l10n.prayerNotYetDue(displayName)
+                          : (isPrayed ? l10n.prayerMarkedDone(displayName) : l10n.prayerNotDoneYet(displayName)),
+                      child: Checkbox(
+                        value: isPrayed,
+                        activeColor: AppColors.primaryEmerald,
+                        onChanged: hasPassed ? (_) => _togglePrayed(prayer.name) : null,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -587,4 +632,86 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
       ),
     );
   }
+}
+
+class _MosaicBg extends StatefulWidget {
+  final int col; // 0-indexed, 0..4
+  final int row; // 0-indexed, 0..1
+  final double opacity;
+  const _MosaicBg({required this.col, required this.row, this.opacity = 0.4});
+
+  @override
+  State<_MosaicBg> createState() => _MosaicBgState();
+}
+
+class _MosaicBgState extends State<_MosaicBg> {
+  static ui.Image? _cachedImage;
+  ui.Image? _image;
+  ImageStreamListener? _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cachedImage != null) {
+      _image = _cachedImage;
+    } else {
+      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+          .resolve(const ImageConfiguration());
+      _listener = ImageStreamListener((info, _) {
+        _cachedImage = info.image;
+        if (mounted) setState(() => _image = info.image);
+      });
+      stream.addListener(_listener!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = _image;
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (img != null)
+            CustomPaint(painter: _MosaicCellPainter(image: img, col: widget.col, row: widget.row))
+          else
+            Container(color: const Color(0xFF0F766E)),
+          Container(color: Colors.black.withValues(alpha: widget.opacity)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MosaicCellPainter extends CustomPainter {
+  final ui.Image image;
+  final int col;
+  final int row;
+  static const int cols = 5;
+  static const int rows = 2;
+  _MosaicCellPainter({required this.image, required this.col, required this.row});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cellW = image.width / cols;
+    final cellH = image.height / rows;
+    final srcAspect = cellW / cellH;
+    final dstAspect = size.width / size.height;
+    Rect src;
+    if (srcAspect > dstAspect) {
+      final visW = cellH * dstAspect;
+      final dx = (cellW - visW) / 2;
+      src = Rect.fromLTWH(col * cellW + dx, row * cellH, visW, cellH);
+    } else {
+      final visH = cellW / dstAspect;
+      final dy = (cellH - visH) / 2;
+      src = Rect.fromLTWH(col * cellW, row * cellH + dy, cellW, visH);
+    }
+    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawImageRect(image, src, dst, Paint()..filterQuality = FilterQuality.medium);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MosaicCellPainter oldDelegate) =>
+      oldDelegate.image != image || oldDelegate.col != col || oldDelegate.row != row;
 }
