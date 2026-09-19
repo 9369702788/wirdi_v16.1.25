@@ -948,8 +948,7 @@ class _QuickAction extends StatelessWidget {
 class _MosaicBg extends StatefulWidget {
   final int col; // 0-indexed, 0..4
   final int row; // 0-indexed, 0..1
-  final double opacity;
-  const _MosaicBg({required this.col, required this.row, this.opacity = 0.4});
+  const _MosaicBg({required this.col, required this.row});
 
   @override
   State<_MosaicBg> createState() => _MosaicBgState();
@@ -987,7 +986,7 @@ class _MosaicBgState extends State<_MosaicBg> {
             CustomPaint(painter: _MosaicCellPainter(image: img, col: widget.col, row: widget.row))
           else
             Container(color: const Color(0xFF0F766E)),
-          Container(color: Colors.black.withValues(alpha: widget.opacity)),
+          Container(color: Colors.black.withValues(alpha: 0.4)),
         ],
       ),
     );
