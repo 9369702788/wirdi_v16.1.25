@@ -16,6 +16,7 @@ class QuranPlaybackBar extends StatelessWidget {
         final max = duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1.0;
         final value = position.inMilliseconds.clamp(0, max.toInt()).toDouble();
         final isAr = Localizations.localeOf(context).languageCode == 'ar';
+        final surahName = quranAudio.currentSurahName ?? (isAr ? 'سورة' : 'Surah');
         return Material(
           elevation: 10,
           color: AppColors.primaryEmerald,
@@ -37,7 +38,7 @@ class QuranPlaybackBar extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        isAr ? 'سورة ${quranAudio.currentSurahNumber ?? '-'} • آية ${quranAudio.playingAyah ?? '-'}' : 'Surah ${quranAudio.currentSurahNumber ?? '-'} • Ayah ${quranAudio.playingAyah ?? '-'}',
+                        isAr ? '$surahName • آية ${quranAudio.playingAyah ?? '-'}' : '$surahName • Ayah ${quranAudio.playingAyah ?? '-'}',
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                       ),
