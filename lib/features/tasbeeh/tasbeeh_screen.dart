@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -121,25 +122,25 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
 
     final next = _today + 1;
     final nextTotal = _total + 1;
+    final completedCycle = next >= _selected.target;
 
-    // Update the UI immediately; persist in the background so disk I/O
-    // never delays the counter incrementing on screen.
+    // When the selected target is completed, immediately start a fresh
+    // empty cycle while keeping the completed tap in the lifetime totals.
     setState(() {
-      _today = next;
+      _today = completedCycle ? 0 : next;
       _total = nextTotal;
       _grandTotal += 1;
     });
 
-    unawaited(_persistIncrement(next, nextTotal));
+    unawaited(_persistIncrement(next, nextTotal, completedCycle: completedCycle));
 
-    if (_today == _selected.target) {
+    if (completedCycle) {
       HapticFeedback.heavyImpact();
     }
   }
-
-  Future<void> _persistIncrement(int next, int nextTotal) async {
+  Future<void> _persistIncrement(int next, int nextTotal, {bool completedCycle = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('tasbeeh_today_${_selected.id}', next);
+    await prefs.setInt('tasbeeh_today_${_selected.id}', completedCycle ? 0 : next);
     await prefs.setString('tasbeeh_day_${_selected.id}', _todayKey());
     await prefs.setInt('tasbeeh_total_${_selected.id}', nextTotal);
     await UserProgressService.incrementTasbeehDailyTotal();
@@ -225,121 +226,180 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
           IconButton(onPressed: _reset, icon: const Icon(Icons.refresh), tooltip: l10n.tasbeehResetToday),
         ],
       ),
-      body: SafeArea(bottom: true, top: false, child: Column(
-        children: [
-          SizedBox(
-            height: 56,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: _allPhrases.length + 1,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                if (index == _allPhrases.length) {
-                  return ActionChip(
-                    avatar: const Icon(Icons.add, size: 18),
-                    label: Text(l10n.tasbeehCustom),
-                    onPressed: _addCustomPhrase,
-                  );
-                }
-
-                final phrase = _allPhrases[index];
-                final isSelected = phrase.id == _selected.id;
-                return GestureDetector(
-                  onLongPress: phrase.isCustom ? () => _deleteCustomPhrase(phrase) : null,
-                  child: ChoiceChip(
-                    label: Text(phrase.text),
-                    selected: isSelected,
-                    onSelected: (_) => _selectPhrase(phrase),
-                    selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
-                    labelStyle: TextStyle(
-                      color: isSelected ? AppColors.primaryEmerald : null,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _StatChip(label: l10n.tasbeehToday, value: '$_today'),
-                  const SizedBox(width: 10),
-                  _StatChip(label: l10n.tasbeehTarget, value: '${_selected.target}'),
-                  const SizedBox(width: 10),
-                  _StatChip(label: l10n.tasbeehPhraseTotal, value: '$_total'),
-                  const SizedBox(width: 10),
-                  _StatChip(label: l10n.tasbeehGrandTotal, value: '$_grandTotal'),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: Semantics(
-                button: true,
-                label: l10n.tasbeehCounterLabel(_selected.text, _today, _selected.target),
-                child: GestureDetector(
-                onTap: _increment,
-                child: Container(
-                  width: 230,
-                  height: 230,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(colors: [AppColors.primaryEmerald, Color(0xFF115E56)]),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primaryEmerald.withValues(alpha: 0.35),
-                        blurRadius: 30,
-                        offset: const Offset(0, 12),
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 210,
-                        height: 210,
-                        child: CircularProgressIndicator(
-                          value: progress,
-                          strokeWidth: 6,
-                          backgroundColor: Colors.white.withValues(alpha: 0.15),
-                          valueColor: AlwaysStoppedAnimation(AppColors.goldAccent),
+      body: SafeArea(
+        bottom: true,
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final landscape = constraints.maxWidth > constraints.maxHeight;
+            final circleSize = landscape
+                ? math.min(220.0, constraints.maxHeight * 0.58)
+                : math.min(300.0, constraints.maxWidth - 32);
+            final progressSize = math.max(0.0, circleSize - 20);
+            final content = Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 56,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: _allPhrases.length + 1,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      if (index == _allPhrases.length) {
+                        return ActionChip(
+                          avatar: const Icon(Icons.add, size: 18),
+                          label: Text(l10n.tasbeehCustom),
+                          onPressed: _addCustomPhrase,
+                        );
+                      }
+                      final phrase = _allPhrases[index];
+                      final isSelected = phrase.id == _selected.id;
+                      return GestureDetector(
+                        onLongPress: phrase.isCustom ? () => _deleteCustomPhrase(phrase) : null,
+                        child: ChoiceChip(
+                          label: Text(phrase.text),
+                          selected: isSelected,
+                          onSelected: (_) => _selectPhrase(phrase),
+                          selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
+                          labelStyle: TextStyle(
+                            color: isSelected ? AppColors.primaryEmerald : null,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                          ),
                         ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('$_today', style: const TextStyle(color: Colors.white, fontSize: 52, fontWeight: FontWeight.w700)),
-                          Text(_selected.text, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                        ],
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
-              ),
-              ),
-            ),
-          ),
-          if (gloss != null && gloss.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(gloss, style: const TextStyle(color: AppColors.mutedText, fontSize: 12)),
-            ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(l10n.tasbeehTapHint, style: const TextStyle(color: AppColors.mutedText, fontSize: 12)),
-          ),
-        ],
-      )),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: landscape ? 8 : 20),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _StatChip(label: l10n.tasbeehToday, value: '$_today'),
+                        const SizedBox(width: 10),
+                        _StatChip(label: l10n.tasbeehTarget, value: '${_selected.target}'),
+                        const SizedBox(width: 10),
+                        _StatChip(label: l10n.tasbeehPhraseTotal, value: '$_total'),
+                        const SizedBox(width: 10),
+                        _StatChip(label: l10n.tasbeehGrandTotal, value: '$_grandTotal'),
+                      ],
+                    ),
+                  ),
+                ),
+                Semantics(
+                  button: true,
+                  label: l10n.tasbeehCounterLabel(_selected.text, _today, _selected.target),
+                  child: GestureDetector(
+                    onTap: _increment,
+                    child: SizedBox(
+                      width: circleSize,
+                      height: circleSize,
+                      child: CustomPaint(
+                        painter: _TasbeehBeadsPainter(
+                          count: _selected.target,
+                          litCount: _today.clamp(0, _selected.target),
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.all(10),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(colors: [AppColors.primaryEmerald, const Color(0xFF115E56)]),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primaryEmerald.withValues(alpha: 0.35),
+                                blurRadius: 30,
+                                offset: const Offset(0, 12),
+                              ),
+                            ],
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              SizedBox(
+                                width: progressSize,
+                                height: progressSize,
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  strokeWidth: 6,
+                                  backgroundColor: Colors.white.withValues(alpha: 0.15),
+                                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.goldAccent),
+                                ),
+                              ),
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text('$_today', style: TextStyle(color: Colors.white, fontSize: landscape ? 48 : 64, fontWeight: FontWeight.w700)),
+                                  ),
+                                  Text(_selected.text, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (gloss != null && gloss.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    child: Text(gloss, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.mutedText, fontSize: 12)),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(l10n.tasbeehTapHint, style: const TextStyle(color: AppColors.mutedText, fontSize: 12)),
+                ),
+              ],
+            );
+            return landscape
+                ? SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Center(child: content),
+                  )
+                : content;
+          },
+        ),
+      ),
     );
   }
+}
+
+class _TasbeehBeadsPainter extends CustomPainter {
+  final int count;
+  final int litCount;
+  const _TasbeehBeadsPainter({required this.count, required this.litCount});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (count <= 0) return;
+    final center = size.center(Offset.zero);
+    final radius = math.min(size.width, size.height) / 2 - 4;
+    final beadRadius = math.max(2.2, math.min(5.5, radius * 0.035));
+    final paint = Paint()..style = PaintingStyle.fill;
+
+    for (var i = 0; i < count; i++) {
+      final angle = -math.pi / 2 + (2 * math.pi * i / count);
+      final point = Offset(
+        center.dx + radius * math.cos(angle),
+        center.dy + radius * math.sin(angle),
+      );
+      final lit = i < litCount;
+      paint.color = lit
+          ? AppColors.goldAccent
+          : Colors.white.withValues(alpha: 0.32);
+      canvas.drawCircle(point, beadRadius + (lit ? 1.2 : 0), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TasbeehBeadsPainter oldDelegate) =>
+      oldDelegate.count != count || oldDelegate.litCount != litCount;
 }
 
 class _StatChip extends StatelessWidget {

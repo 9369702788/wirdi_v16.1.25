@@ -4,7 +4,7 @@ import '../../../core/services/radio_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../l10n/generated/app_localizations.dart';
-import '../radio_screen.dart';
+import '../radio_now_playing_screen.dart';
 
 class RadioMiniPlayer extends StatelessWidget {
   const RadioMiniPlayer({super.key});
@@ -24,7 +24,7 @@ class RadioMiniPlayer extends StatelessWidget {
 
         return GestureDetector(
           onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const RadioScreen())),
+              MaterialPageRoute(builder: (_) => const RadioNowPlayingScreen())),
           child: Container(
             height: 60,
             margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
@@ -37,9 +37,16 @@ class RadioMiniPlayer extends StatelessWidget {
               )],
             ),
             child: Row(children: [
-              const SizedBox(width: 14),
-              const Icon(Icons.graphic_eq_rounded, color: Colors.white70, size: 24),
-              const SizedBox(width: 12),
+              const SizedBox(width: 6),
+              if (svc.allStations.length > 1)
+                IconButton(
+                  icon: const Icon(Icons.skip_previous_rounded, color: Colors.white70, size: 22),
+                  onPressed: () => svc.playPrevious(),
+                )
+              else
+                const SizedBox(width: 8),
+              const Icon(Icons.graphic_eq_rounded, color: Colors.white70, size: 22),
+              const SizedBox(width: 10),
               Expanded(child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,21 +76,28 @@ class RadioMiniPlayer extends StatelessWidget {
                   ]),
                 ),
               svc.isLoading
-                  ? const Padding(padding: EdgeInsets.symmetric(horizontal: 14),
+                  ? const Padding(padding: EdgeInsets.symmetric(horizontal: 10),
                       child: SizedBox(width: 22, height: 22,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)))
                   : IconButton(
                       icon: Icon(svc.isPlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
-                          color: Colors.white, size: 28),
+                          color: Colors.white, size: 26),
                       onPressed: () {
                         if (svc.isPlaying) {
-                          svc.stop();
+                          svc.pause();
                         } else if (svc.currentStation != null) {
                           svc.play(svc.currentStation!);
                         }
                       },
                     ),
-              const SizedBox(width: 4),
+              if (svc.allStations.length > 1)
+                IconButton(
+                  icon: const Icon(Icons.skip_previous_rounded, color: Colors.white70, size: 22),
+                  onPressed: () => svc.playPrevious(),
+                )
+              else
+                const SizedBox(width: 8),
+              const SizedBox(width: 2),
             ]),
           ),
         );

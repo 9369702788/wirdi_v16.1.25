@@ -224,7 +224,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                     for (final hit in _quranResults)
                       Card(
                         child: ListTile(
-                          title: Text(hit.ayah.text, textDirection: TextDirection.rtl, textAlign: TextAlign.right),
+                          title: Text(hit.ayah.text, textDirection: TextDirection.rtl, textAlign: TextAlign.right, style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 19, height: 1.9)),
                           subtitle: Text('${hit.surah.name} \u2022 ${hit.ayah.number}'),
                           onTap: () {
                             _saveToHistory(_controller.text);

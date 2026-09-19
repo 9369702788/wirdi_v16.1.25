@@ -25,6 +25,7 @@ import '../../core/services/audio_download_service.dart';
 import '../../core/services/adhan_audio_cache.dart';
 import '../../core/services/azkar_repository.dart';
 import '../../core/services/notification_service.dart';
+import 'notification_diagnostics_screen.dart';
 import '../../core/services/daily_reminder_scheduler.dart';
 import '../../core/services/quran_repository.dart';
 import '../../core/services/settings_service.dart';
@@ -35,7 +36,6 @@ import '../../core/data/app_sources.dart';
 import '../../core/services/user_progress_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../l10n/generated/app_localizations.dart';
-import '../../shared/widgets/wirdi_scenic_background.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -219,10 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final languageCode = Localizations.localeOf(context).languageCode;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsTitle), centerTitle: true),
-      body: WirdiScenicBackground(
-        asset: 'assets/images/ui/lantern_sunset.jpg',
-        height: 230,
-        child: ListenableBuilder(
+      body: ListenableBuilder(
         listenable: appSettings,
         builder: (context, _) {
           return ListView(padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
@@ -246,8 +243,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       )
                     : const SizedBox.shrink(),
               ),
-                        _SectionLabel(l10n.settingsAppearance),
-              Card(
+                        ExpansionTile(
+                title: Text(l10n.settingsAppearance, style: const TextStyle(fontWeight: FontWeight.w700)),
+                initiallyExpanded: true,
+                tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                children: [
+                  Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(children: [
@@ -472,9 +473,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
             ]))),
+                  ],
+                ),
               const SizedBox(height: 20),
-              _SectionLabel(l10n.settingsPrayerReminder),
-              Card(
+              ExpansionTile(
+                title: Text(l10n.settingsPrayerReminder, style: const TextStyle(fontWeight: FontWeight.w700)),
+                initiallyExpanded: false,
+                tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                children: [
+                  Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -783,6 +790,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 8),
               Card(
                 child: ListTile(
+                  leading: Icon(Icons.health_and_safety_outlined, color: AppColors.primaryEmerald),
+                  title: Text(Localizations.localeOf(context).languageCode == 'ar' ? 'تشخيص وإصلاح الإشعارات' : 'Notification Diagnostics & Repair'),
+                  subtitle: Text(Localizations.localeOf(context).languageCode == 'ar'
+                      ? 'اطمئن إن الإشعارات شغالة فعليًا، أو أصلحها بضغطة واحدة'
+                      : 'Check permissions, verify what is actually scheduled, or repair with one tap'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationDiagnosticsScreen())),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
                   leading: Icon(Icons.schedule_send_outlined, color: AppColors.primaryEmerald),
                   title: const Text('Schedule test notification in 1 minute'),
                   subtitle: const Text('Diagnostic: proves whether SCHEDULED notifications (like Adhan/reminders) can actually fire on this device -- lock your screen and wait 1 minute after tapping'),
@@ -816,9 +835,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
               ),
+                  ],
+                ),
               const SizedBox(height: 12),
-              _SectionLabel(l10n.settingsMoreReminders),
-              Card(
+              ExpansionTile(
+                title: Text(l10n.settingsMoreReminders, style: const TextStyle(fontWeight: FontWeight.w700)),
+                initiallyExpanded: false,
+                tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                children: [
+                  Card(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(children: [
@@ -895,6 +920,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ]),
                 ),
               ),
+                  ],
+                ),
               const SizedBox(height: 20),
               _SectionLabel(l10n.settingsDataManagement),
               Card(
@@ -1088,7 +1115,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           );
         },
-      ),
       ),
     );
   }
