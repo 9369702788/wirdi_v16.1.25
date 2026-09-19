@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/services/prayer_service.dart';
+import '../../core/services/prayer_notification_scheduler.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/models/prayer_models.dart';
 
@@ -27,11 +28,13 @@ class RootShell extends StatefulWidget {
 
 class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
   int _index = 0;
+  int? _lastTimezoneOffsetMinutes;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _rememberTimezoneOffset();
 
     // Surfaces a background-notification setup failure directly in the
     // app -- previously this only ever went to a debugPrint nobody could
@@ -75,6 +78,27 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     // that up immediately instead of leaving the user waiting.
     if (state == AppLifecycleState.resumed) {
       _refreshAutoDarkModeOnResume();
+      _refreshPrayerDataAfterTimezoneChange();
+    }
+  }
+
+  Future<void> _rememberTimezoneOffset() async {
+    _lastTimezoneOffsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
+  }
+
+  Future<void> _refreshPrayerDataAfterTimezoneChange() async {
+    final currentOffset = DateTime.now().timeZoneOffset.inMinutes;
+    final previousOffset = _lastTimezoneOffsetMinutes;
+    _lastTimezoneOffsetMinutes = currentOffset;
+    if (previousOffset == null || previousOffset == currentOffset) return;
+
+    try {
+      await PrayerService.invalidatePrayerCache();
+      final result = await PrayerService.fetchUsingSavedPreference();
+      if (!mounted) return;
+      await PrayerNotificationScheduler.rescheduleFromResult(context, result);
+    } catch (_) {
+      // Best effort: the next normal prayer-time refresh will recover.
     }
   }
 
@@ -148,13 +172,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             label: l10n.navQuran,
           ),
           BottomNavigationBarItem(                          // 2
-            icon: const Icon(Icons.favorite_outline),
-            activeIcon: const Icon(Icons.favorite),
+            icon: const Icon(Icons.volunteer_activism_outlined),
+            activeIcon: const Icon(Icons.volunteer_activism),
             label: l10n.navAzkar,
           ),
           BottomNavigationBarItem(                          // 3
-            icon: const Icon(Icons.access_time),
-            activeIcon: const Icon(Icons.access_time_filled),
+            icon: const Icon(Icons.mosque_outlined),
+            activeIcon: const Icon(Icons.mosque),
             label: l10n.navPrayer,
           ),
           BottomNavigationBarItem(                          // 4
@@ -163,8 +187,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
             label: l10n.navTasbeeh,
           ),
           BottomNavigationBarItem(                          // 5  ← Radio
-            icon: const Icon(Icons.radio_outlined),
-            activeIcon: const Icon(Icons.radio),
+            icon: const Icon(Icons.podcasts_outlined),
+            activeIcon: const Icon(Icons.podcasts),
             label: l10n.radioTitle,
           ),
           BottomNavigationBarItem(                          // 6  ← Settings/More

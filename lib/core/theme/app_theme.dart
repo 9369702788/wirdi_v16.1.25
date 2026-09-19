@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Wirdi design tokens, per the Premium UI/UX Specification brief.
 ///
@@ -97,11 +98,11 @@ class AppTheme {
         'ar': 'زمردي', 'en': 'Emerald', 'de': 'Smaragd', 'tr': 'Zümrüt',
         'fr': 'Émeraude', 'es': 'Esmeralda', 'id': 'Zamrud',
       },
-      primary: Color(0xFF0F766E),
-      accent: Color(0xFFD4AF37),
-      lightBackground: Color(0xFFF8FAF6),
-      darkBackground: Color(0xFF071A17),
-      darkCard: Color(0xFF102925),
+      primary: Color(0xFF0F5132),
+      accent: Color(0xFFD4AF7C),
+      lightBackground: Color(0xFFF7EBD3),
+      darkBackground: Color(0xFF2D3748),
+      darkCard: Color(0xFF374151),
       cardRadius: 20,
     ),
     AppColorTheme.ocean: AppThemeDefinition(
@@ -213,7 +214,7 @@ class AppTheme {
     ),
     AppColorTheme.pureMinimal: AppThemeDefinition(
       displayNameByLocale: {
-        'ar': 'بسيط تمامًا', 'en': 'Pure Minimal', 'de': 'Rein Minimal', 'tr': 'Saf Minimal',
+        'ar': 'بسيط تماماً', 'en': 'Pure Minimal', 'de': 'Rein Minimal', 'tr': 'Saf Minimal',
         'fr': 'Pur minimal', 'es': 'Minimalismo puro', 'id': 'Minimal Murni',
       },
       primary: Color(0xFF6B8F71),
@@ -238,7 +239,7 @@ class AppTheme {
         surface: Colors.white,
       ),
       scaffoldBackgroundColor: def.lightBackground,
-      fontFamily: def.fontFamily ?? 'Cairo',
+      fontFamily: def.fontFamily ?? GoogleFonts.cairo().fontFamily,
     );
 
     return base.copyWith(
@@ -293,7 +294,7 @@ class AppTheme {
         surface: def.darkCard,
       ),
       scaffoldBackgroundColor: def.darkBackground,
-      fontFamily: def.fontFamily ?? 'Cairo',
+      fontFamily: def.fontFamily ?? GoogleFonts.cairo().fontFamily,
     );
 
     return base.copyWith(

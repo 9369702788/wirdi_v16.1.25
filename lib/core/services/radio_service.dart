@@ -49,7 +49,7 @@ class RadioService extends ChangeNotifier {
 
   static const _favsKey = 'radio_favorites';
 
-  // ── Getters ───────────────────────────────────────────────────────────────
+  // ── Getters ──────────────────────────────────────────────────────
   RadioState get state             => _state;
   RadioStation? get currentStation => _currentStation;
   String? get errorMessage         => _errorMessage;
@@ -69,7 +69,7 @@ class RadioService extends ChangeNotifier {
   List<RadioStation> get favoriteStations =>
       _liveStations.where((s) => _favoriteIds.contains(s.id)).toList();
 
-  // ── Init ──────────────────────────────────────────────────────────────────
+  // ── Init ─────────────────────────────────────────────────────────
   Future<void> init() async {
     if (_initialized) return;
     _initialized = true;
@@ -90,7 +90,7 @@ class RadioService extends ChangeNotifier {
     _refreshFromApiInBackground();
   }
 
-  // ── Background API refresh ────────────────────────────────────────────────
+  // ── Background API refresh ──────────────────────────────────────
   void _refreshFromApiInBackground() {
     // Fire and forget — does NOT block init or the UI
     Future.microtask(_doRefresh);
@@ -225,7 +225,7 @@ class RadioService extends ChangeNotifier {
         .toList();
   }
 
-  // ── Playback ──────────────────────────────────────────────────────────────
+  // ── Playback ─────────────────────────────────────────────────────
   Future<void> play(RadioStation station) async {
     try {
       if (_currentStation?.id == station.id && isPlaying) return;
@@ -271,13 +271,35 @@ class RadioService extends ChangeNotifier {
 
   Future<void> togglePlay(RadioStation station) async {
     if (_currentStation?.id == station.id && isPlaying) {
-      await stop();
+      await pause();
     } else {
       await play(station);
     }
   }
 
-  // ── Sleep Timer ───────────────────────────────────────────────────────────
+  /// Plays the station right after the current one in [allStations],
+  /// wrapping around to the first station after the last. No-op if
+  /// nothing is currently selected or the list has fewer than 2 items.
+  Future<void> playNext() async {
+    if (_currentStation == null || _liveStations.length < 2) return;
+    final idx = _liveStations.indexWhere((s) => s.id == _currentStation!.id);
+    if (idx == -1) return;
+    final nextIdx = (idx + 1) % _liveStations.length;
+    await play(_liveStations[nextIdx]);
+  }
+
+  /// Plays the station right before the current one in [allStations],
+  /// wrapping around to the last station before the first. No-op if
+  /// nothing is currently selected or the list has fewer than 2 items.
+  Future<void> playPrevious() async {
+    if (_currentStation == null || _liveStations.length < 2) return;
+    final idx = _liveStations.indexWhere((s) => s.id == _currentStation!.id);
+    if (idx == -1) return;
+    final prevIdx = (idx - 1 + _liveStations.length) % _liveStations.length;
+    await play(_liveStations[prevIdx]);
+  }
+
+  // ── Sleep Timer ──────────────────────────────────────────────────
   void setSleepTimer(int minutes) {
     cancelSleepTimer();
     _sleepMinutesRemaining = minutes;
@@ -303,7 +325,7 @@ class RadioService extends ChangeNotifier {
     _sleepMinutesRemaining = null;
   }
 
-  // ── Favorites ─────────────────────────────────────────────────────────────
+  // ── Favorites ────────────────────────────────────────────────────
   Future<void> toggleFavorite(String stationId) async {
     if (_favoriteIds.contains(stationId)) {
       _favoriteIds.remove(stationId);

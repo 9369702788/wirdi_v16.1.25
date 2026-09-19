@@ -160,6 +160,21 @@ class NotificationService {
 
   static bool get isInitialized => _initialized;
 
+  /// Ground truth: what does Android ACTUALLY have scheduled right now,
+  /// independent of whatever this app's own SharedPreferences ID lists
+  /// think is scheduled. The two CAN drift apart (e.g. an interrupted
+  /// scheduling run, an app crash mid-reschedule) -- this is the one
+  /// call that can't lie, since it asks the OS directly.
+  static Future<List<PendingNotificationRequest>> pendingRequests() async {
+    await initialize();
+    try {
+      return await _plugin.pendingNotificationRequests();
+    } catch (e, st) {
+      AppLogger.error('pendingNotificationRequests failed', error: e, stackTrace: st);
+      return const [];
+    }
+  }
+
   /// No need to resolve the device's IANA timezone name (that required
   /// the flutter_timezone plugin, which pulled in a native Kotlin Gradle
   /// Plugin dependency that broke Android builds on some toolchains).

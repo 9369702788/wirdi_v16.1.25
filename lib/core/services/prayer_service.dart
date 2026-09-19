@@ -420,7 +420,7 @@ class PrayerService {
   /// NOTE: not yet wired to any automatic timezone/time-change trigger --
   /// call this manually (e.g. on app resume) until a real native
   /// TIMEZONE_CHANGED listener is implemented. See README known limitations.
-  Future<void> invalidatePrayerCache() async {
+  static Future<void> invalidatePrayerCache() async {
     AppLogger.info('[prayer_service] Invalidating cached prayer times...');
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('cached_prayer_times');
