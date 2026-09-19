@@ -46,15 +46,21 @@ class _SplashScreenState extends State<SplashScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          const _MosaicBg(col: 1, row: 0, opacity: 0.5),
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/generated/mosque_sunrise.png',
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+            ),
+          ),
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  AppColors.primaryEmerald.withValues(alpha: 0.35),
-                  AppColors.darkBackground.withValues(alpha: 0.55),
+                  AppColors.darkBackground.withValues(alpha: 0.30),
+                  AppColors.darkBackground.withValues(alpha: 0.84),
                 ],
               ),
             ),
@@ -66,22 +72,22 @@ class _SplashScreenState extends State<SplashScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 96,
-                  height: 96,
+                  width: 112,
+                  height: 112,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white.withValues(alpha: 0.08),
                     border: Border.all(color: AppColors.goldAccent, width: 2),
                   ),
-                  child: Icon(Icons.spa_outlined,
-                      color: AppColors.goldAccent, size: 44),
+                  child: Icon(Icons.auto_stories_outlined,
+                      color: AppColors.goldAccent, size: 52),
                 ),
                 const SizedBox(height: 24),
                 Text(
                   l10n.appTitle,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 40,
+                    fontSize: 44,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
