@@ -15,6 +15,7 @@ import '../../core/services/user_progress_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../quran/widgets/quran_playback_bar.dart';
+import '../quran/quran_screen.dart';
 
 class MushafViewScreen extends StatefulWidget {
   final int? initialPage;
@@ -160,6 +161,40 @@ class _MushafViewScreenState extends State<MushafViewScreen> {
         title: Text(l10n.mushafTitle),
         centerTitle: true,
         actions: [
+          IconButton(
+            tooltip: Localizations.localeOf(context).languageCode == 'ar' ? 'القراءة العادية' : 'Normal Quran view',
+            icon: const Icon(Icons.menu_book_outlined),
+            onPressed: () {
+              final pages = _pages;
+              final surahs = _allSurahs;
+              if (pages == null || surahs == null || pages.isEmpty) return;
+              final playingSurah = quranAudio.currentSurahNumber;
+              final playingAyah = quranAudio.playingAyah;
+              MushafAyahRef? ref;
+              if (playingSurah != null && playingAyah != null) {
+                for (final page in pages) {
+                  for (final ayah in page.ayahs) {
+                    if (ayah.surahNumber == playingSurah && ayah.ayahNumber == playingAyah) {
+                      ref = ayah;
+                      break;
+                    }
+                  }
+                  if (ref != null) break;
+                }
+              }
+              if (ref == null) {
+                final page = pages[_currentPageIndex.clamp(0, pages.length - 1).toInt()];
+                if (page.ayahs.isEmpty) return;
+                ref = page.ayahs.first;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => QuranScreen(initialSurahNumber: ref!.surahNumber, initialAyah: ref.ayahNumber),
+                ),
+              );
+            },
+          ),
           PopupMenuButton<String>(
             tooltip: Localizations.localeOf(context).languageCode == 'ar' ? 'خيارات القراءة' : 'Reading options',
             icon: const Icon(Icons.tune_rounded),
@@ -188,8 +223,15 @@ class _MushafViewScreenState extends State<MushafViewScreen> {
                   ),
                 );
                 if (chosen != null && chosen != appSettings.reciterId) {
-                  await quranAudio.stop();
-                  await appSettings.setReciterId(chosen);
+                  final activeSurahNumber = quranAudio.currentSurahNumber ?? widget.initialSurahNumber;
+                  final activeSurah = activeSurahNumber == null
+                      ? null
+                      : _allSurahs?.firstWhere((s) => s.number == activeSurahNumber, orElse: () => _allSurahs!.first);
+                  if (activeSurah != null && _allSurahs != null) {
+                    await quranAudio.changeReciter(chosen, surah: activeSurah, allSurahs: _allSurahs!);
+                  } else {
+                    await appSettings.setReciterId(chosen);
+                  }
                   if (mounted) setState(() {});
                 }
               }
@@ -334,11 +376,18 @@ class _MushafViewScreenState extends State<MushafViewScreen> {
               itemCount: pages.length,
               onPageChanged: (index) {
                 _currentPageIndex = index;
-                UserProgressService.saveLastReading(
-                  surahNumber: pages[index].ayahs.isNotEmpty ? pages[index].ayahs.first.surahNumber : 1,
-                  surahName: '',
-                  ayahNumber: pages[index].ayahs.isNotEmpty ? pages[index].ayahs.first.ayahNumber : 1,
-                );
+                if (pages[index].ayahs.isNotEmpty) {
+                  final firstAyah = pages[index].ayahs.first;
+                  final surah = allSurahs.firstWhere(
+                    (s) => s.number == firstAyah.surahNumber,
+                    orElse: () => allSurahs.first,
+                  );
+                  UserProgressService.saveLastReading(
+                    surahNumber: firstAyah.surahNumber,
+                    surahName: surah.name,
+                    ayahNumber: firstAyah.ayahNumber,
+                  );
+                }
               },
               itemBuilder: (context, index) {
                 final page = pages[index];
@@ -494,7 +543,7 @@ class _MushafPageViewState extends State<_MushafPageView> {
                     Bismillah.text,
                     textAlign: TextAlign.center,
                     textDirection: TextDirection.rtl,
-                    style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 24, fontWeight: FontWeight.normal),
+                    style: const TextStyle(fontFamily: 'AmiriQuran', fontSize: 24 * widget.fontScale, fontWeight: FontWeight.normal),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -549,7 +598,7 @@ class _MushafPageViewState extends State<_MushafPageView> {
                 textAlign: TextAlign.justify,
                 style: TextStyle(
                   fontFamily: appSettings.quranFontFamily == 'default' ? 'AmiriQuran' : appSettings.quranFontFamily,
-                  fontSize: 22,
+                  fontSize: 22 * widget.fontScale,
                   height: 2.4,
                   fontWeight: FontWeight.normal,
                 ),
