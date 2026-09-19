@@ -852,7 +852,8 @@ class _SurahReaderScreenState extends State<SurahReaderScreen> {
   }
 
   Future<void> _showPlaybackSpeedPicker() async {
-    final isAr = languageCode == 'ar';
+final languageCode = Localizations.localeOf(context).languageCode;
+final isAr = languageCode == 'ar';    
     final selected = await showModalBottomSheet<double>(
       context: context,
       builder: (sheetContext) => SafeArea(
