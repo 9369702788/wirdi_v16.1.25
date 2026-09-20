@@ -240,7 +240,7 @@ class AppTheme {
         surface: Colors.white,
       ),
       scaffoldBackgroundColor: def.lightBackground,
-      fontFamily: def.fontFamily ?? GoogleFonts.tajawal().fontFamily,
+      fontFamily: def.fontFamily ?? GoogleFonts.cairo().fontFamily,
     );
 
     return base.copyWith(
@@ -258,7 +258,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(def.cardRadius),
         ),
       ),
-      textTheme: base.textTheme.apply(
+      // Brand identity: Tajawal for headings/titles, Cairo for body
+      // copy. `manuscript` keeps its own single calligraphic font
+      // (fontFamily != null) applied uniformly, unchanged.
+      textTheme: (def.fontFamily != null ? base.textTheme : _brandTextTheme(base.textTheme)).apply(
         bodyColor: const Color(0xFF102925),
         displayColor: const Color(0xFF102925),
       ),
@@ -277,9 +280,39 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          textStyle: def.fontFamily != null
+              ? const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)
+              : GoogleFonts.tajawal(fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ),
+    );
+  }
+
+  /// Applies the brand's two-font system on top of a Material
+  /// [TextTheme]: Tajawal for anything display/headline/title-sized
+  /// (headings, app-bar titles, section titles), Cairo for anything
+  /// body/label-sized (paragraphs, list subtitles, captions). Falls
+  /// back gracefully -- any style Flutter's TextTheme leaves null
+  /// stays null.
+  static TextTheme _brandTextTheme(TextTheme base) {
+    TextStyle? tajawal(TextStyle? style) => style == null ? null : GoogleFonts.tajawal(textStyle: style);
+    TextStyle? cairo(TextStyle? style) => style == null ? null : GoogleFonts.cairo(textStyle: style);
+    return base.copyWith(
+      displayLarge: tajawal(base.displayLarge),
+      displayMedium: tajawal(base.displayMedium),
+      displaySmall: tajawal(base.displaySmall),
+      headlineLarge: tajawal(base.headlineLarge),
+      headlineMedium: tajawal(base.headlineMedium),
+      headlineSmall: tajawal(base.headlineSmall),
+      titleLarge: tajawal(base.titleLarge),
+      titleMedium: tajawal(base.titleMedium),
+      titleSmall: tajawal(base.titleSmall),
+      bodyLarge: cairo(base.bodyLarge),
+      bodyMedium: cairo(base.bodyMedium),
+      bodySmall: cairo(base.bodySmall),
+      labelLarge: cairo(base.labelLarge),
+      labelMedium: cairo(base.labelMedium),
+      labelSmall: cairo(base.labelSmall),
     );
   }
 
@@ -296,7 +329,7 @@ class AppTheme {
         surface: def.darkCard,
       ),
       scaffoldBackgroundColor: def.darkBackground,
-      fontFamily: def.fontFamily ?? GoogleFonts.tajawal().fontFamily,
+      fontFamily: def.fontFamily ?? GoogleFonts.cairo().fontFamily,
     );
 
     return base.copyWith(
@@ -314,6 +347,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(def.cardRadius),
         ),
       ),
+      // Same Tajawal-for-titles / Cairo-for-body brand system as light().
+      textTheme: def.fontFamily != null ? base.textTheme : _brandTextTheme(base.textTheme),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: def.darkCard,
         selectedItemColor: def.accent,
@@ -329,7 +364,9 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          textStyle: def.fontFamily != null
+              ? const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)
+              : GoogleFonts.tajawal(fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ),
     );
