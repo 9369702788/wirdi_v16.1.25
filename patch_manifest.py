@@ -27,11 +27,33 @@ perm_lines = '\n'.join(
     f'    <uses-permission android:name="{p}" />'
     for p in perms if p not in text
 )
+# v1.54 FIX: this used to do a literal .replace() of the bare
+# `<manifest xmlns:android=...>` tag. The tracked manifest has extra attributes on
+# that tag (xmlns:tools, package=...), so the replace silently matched NOTHING and
+# ACCESS_COARSE_LOCATION / VIBRATE / ACCESS_NETWORK_STATE were never added.
+# Match the opening tag with a regex instead, and fail loudly if it is missing.
 if perm_lines:
-    text = text.replace(
-        '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-        '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n' + perm_lines,
-    )
+    text, n_sub = re.subn(r'(<manifest\b[^>]*>)', lambda m: m.group(1) + '\n' + perm_lines, text, count=1)
+    if n_sub != 1:
+        raise SystemExit('ERROR: could not find the <manifest> opening tag to insert permissions')
+
+# Optional hardware: without required="false" the CAMERA / location / compass
+# permissions make Google Play hide the app from devices that lack that hardware.
+optional_features = [
+    'android.hardware.camera',
+    'android.hardware.camera.autofocus',
+    'android.hardware.location',
+    'android.hardware.location.gps',
+    'android.hardware.sensor.compass',
+]
+feature_lines = '\n'.join(
+    f'    <uses-feature android:name="{f}" android:required="false" />'
+    for f in optional_features if f'android:name="{f}"' not in text
+)
+if feature_lines:
+    text, n_sub = re.subn(r'(<manifest\b[^>]*>)', lambda m: m.group(1) + '\n' + feature_lines, text, count=1)
+    if n_sub != 1:
+        raise SystemExit('ERROR: could not find the <manifest> opening tag to insert uses-feature')
 
 # Add usesCleartextTraffic and networkSecurityConfig to <application>
 if 'usesCleartextTraffic' not in text:

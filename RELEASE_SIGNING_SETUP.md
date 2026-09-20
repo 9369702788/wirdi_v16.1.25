@@ -55,7 +55,10 @@ assuming it covers the others is the single most common cause of
   `build_apk.yml` (reads the actual built APK's certificate, not just
   the keystore file).
 - SHA-1 currently registered in Firebase (wirdi-cb813) for this
-  certificate: `F2:A2:49:6C:5D:A3:D7:41:61:0D:C1:C3:0D:CF:AE:FC:A7:B3:AC:6E`
+  certificate: `2A:7B:78:30:20:FD:3B:27:D4:4D:35:AA:37:21:32:B7:F3:04:B9:13`
+  (v1.54: corrected -- an older revision of this file listed a different, stale
+  fingerprint. This value is what `keytool` prints for the committed debug.keystore
+  and what google-services.json contains.)
   (working -- do not change unless this exact keystore file changes).
 
 ## 2. Upload key (release.keystore)
@@ -108,3 +111,13 @@ assuming it covers the others is the single most common cause of
 | Debug keystore        | CI debug APK, local dev     | HARD GATE #1/#2 (automatic, every run) | Yes -- already done      |
 | Upload key             | CI release .aab/.apk       | HARD GATE #3 (automatic, every run)    | Do this before Closed Testing |
 | Play App Signing key   | What real users receive     | Cannot be automated -- read from Play Console manually | Do this immediately after first Play Console upload |
+
+
+## v1.54 -- how the RELEASE build is actually signed (IMPORTANT)
+Flutter 3.35's generated `build.gradle.kts` signs the `release` build type with the
+DEBUG key. `patch_gradle.py` runs before `key.properties` exists, so it could never
+change that. Since v1.54 the workflow runs `patch_release_signing.py` right after the
+release secrets are written and before `flutter build appbundle --release`, and
+HARD GATE #3 now verifies BOTH the release APK and the release AAB against
+`release.keystore`. If you ever see "release AAB is NOT signed with release.keystore",
+that patch step did not run or its self-check failed.
