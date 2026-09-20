@@ -7,11 +7,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/services/islamic_occasions_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/local_cache_service.dart';
 import 'core/services/radio_service.dart';
 import 'core/services/settings_service.dart';
 import 'core/services/wirdi_audio_handler.dart';
@@ -26,6 +28,10 @@ import 'shared/widgets/root_shell.dart';
 void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+
+    // Tajawal is bundled (assets/google_fonts). Never download fonts at runtime:
+    // it works offline and no request is sent to Google's font servers.
+    GoogleFonts.config.allowRuntimeFetching = false;
 
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);
@@ -91,6 +97,7 @@ void main() {
           // appearing. Removing it costs nothing (the assertion message says
           // it has no effect in this configuration anyway) and fixes the crash.
           androidStopForegroundOnPause: false,
+          androidNotificationIcon: 'drawable/ic_stat_wirdi',
         ),
       );
     } catch (e, st) {
@@ -103,9 +110,18 @@ void main() {
     // Without this granted, no notification can ever show, including
     // the Radio/Quran playback one, no matter how correctly everything
     // else is wired.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(NotificationService.requestPermission());
+    // v1.54: first-run users are asked right after onboarding (see
+    // _afterOnboarding) instead of the instant the app opens; returning users
+    // keep the previous behaviour.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       unawaited(IslamicOccasionsService.scheduleReminders());
+      // v1.54: Azkar and Mushaf-page data are bundled now; drop the ~2 MB copies that
+      // older versions cached in SharedPreferences (it is loaded whole at app start).
+      unawaited(LocalCacheService.clearAll(['cache_azkar_json_v1', 'cache_mushaf_pages_json_v1']));
+      final startupPrefs = await SharedPreferences.getInstance();
+      if (startupPrefs.getBool(_onboardingCompleteKey) ?? false) {
+        unawaited(NotificationService.requestPermission());
+      }
     });
 
     await appSettings.load();
@@ -136,6 +152,7 @@ Future<void> _afterSplash(BuildContext context) async {
 Future<void> _afterOnboarding(BuildContext context) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool(_onboardingCompleteKey, true);
+  unawaited(NotificationService.requestPermission());
   if (context.mounted) {
     Navigator.pushReplacementNamed(context, '/home');
   }

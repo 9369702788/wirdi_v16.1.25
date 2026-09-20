@@ -3,11 +3,19 @@ import 'adhan_option.dart';
 class AppSources {
   AppSources._();
 
+  /// Public URL of the hosted privacy policy (see docs/privacy-policy.html;
+  /// GitHub Pages works). Google Play requires this same URL in the store
+  /// listing. While empty, the in-app policy simply hides the "View online" button.
+  static const String privacyPolicyUrl = '';
+
+  /// Real, monitored contact e-mail shown in the in-app privacy policy.
+  /// While empty, no contact line is shown.
+  static const String privacyContactEmail = '';
+
   static const String quranJsonUrl =
       'https://cdn.jsdelivr.net/npm/quran-json@3.1.2/dist/quran.json';
 
-  static const String azkarJsonUrl =
-      'https://raw.githubusercontent.com/YousefAsalya/Islamic-Pro-azkar-API/main/data/ar.json';
+  // azkarJsonUrl / mushafPagesJsonUrl were removed in v1.54: both datasets are now bundled in assets/data/.
 
   /// Tafsir Al-Muyassar (ar.muyassar), served by Al Quran Cloud
   /// (Islamic Network) — a long-running, widely used public Quran API
@@ -24,12 +32,7 @@ class AppSources {
   /// numbering — verified structure and completeness (6236 verses)
   /// before wiring in.
   static const String transliterationJsonUrl =
-      'https://raw.githubusercontent.com/risan/quran-json/main/dist/quran_transliteration.json';
-
-  /// Real 604-page Madani Mushaf ayah-to-page mapping. Verified
-  /// structure and HTTP 200 before wiring in.
-  static const String mushafPagesJsonUrl =
-      'https://raw.githubusercontent.com/hamzakat/madani-muhsaf-json/main/madani-muhsaf.json';
+      'https://cdn.jsdelivr.net/npm/quran-json@3.1.2/dist/quran_transliteration.json';
 
   /// QuranEnc.com (Encyclopedia of the Noble Quran / King Fahd Complex
   /// affiliated project) — per-language meaning translations, fetched
@@ -157,8 +160,53 @@ class AppSources {
   static String ayahAudioUrl(int globalAyahNumber, {String reciter = 'ar.alafasy'}) =>
       'https://cdn.islamic.network/quran/audio/$_audioBitrate/$reciter/$globalAyahNumber.mp3';
 
-  static String sourcesAndLicensesFor(String languageCode) =>
-      _sourcesAndLicensesByLocale[languageCode] ?? _sourcesAndLicensesByLocale['en']!;
+  static String sourcesAndLicensesFor(String languageCode) {
+    final main = _sourcesAndLicensesByLocale[languageCode] ?? _sourcesAndLicensesByLocale['en']!;
+    final extra = _extraCreditsByLocale[languageCode] ?? _extraCreditsByLocale['en']!;
+    return '${main.trim()}\n\n${extra.trim()}';
+  }
+
+  /// v1.54: credits for the data that is now bundled, the fonts that ship with the
+  /// app, and the third-party services it calls. Kept separate from the long
+  /// per-locale text above so it can be edited in one place.
+  static const Map<String, String> _extraCreditsByLocale = {
+    'ar': '''
+بيانات وخطوط وخدمات إضافية:
+• نص القرآن: quran-json 3.1.2 (risan/quran-json) برخصة CC BY 4.0 ومبني على Tanzil.net — مضمَّن داخل التطبيق.
+• ترقيم صفحات المصحف: madani-muhsaf-json (hamzakat) برخصة MIT — مضمَّن.
+• الأذكار: Islamic Pro Azkar API برخصة MIT — مضمَّنة.
+• خطوط القرآن: Amiri Quran (رخصة SIL OFL 1.1)، وخطا KFGQPC Uthmanic Script HAFS وQPC Hafs © مجمع الملك فهد لطباعة المصحف الشريف (مسموح باستخدامهما وتوزيعهما مجانًا دون تعديل).
+• خط الواجهة: Tajawal (Boutros International) برخصة SIL OFL 1.1.
+• بيانات الأماكن: © مساهمو OpenStreetMap (ODbL) عبر Nominatim وOverpass. الطقس: Open-Meteo.com (CC BY 4.0). المواقيت: AlAdhan. قوائم الراديو: mp3quran.net وRadio-Browser. معاني الكلمات: ummahapi.com. التلاوة: Islamic Network.
+''',
+    'en': '''
+Additional data, fonts and services:
+• Quran text: quran-json 3.1.2 (risan/quran-json), CC BY 4.0, based on Tanzil.net — bundled in the app.
+• Mushaf page layout: madani-muhsaf-json (hamzakat), MIT licence — bundled.
+• Azkar: Islamic Pro Azkar API contributors, MIT licence — bundled.
+• Quran fonts: Amiri Quran (SIL OFL 1.1); KFGQPC Uthmanic Script HAFS and QPC Hafs © King Fahd Glorious Quran Printing Complex (free to use and distribute, unmodified).
+• UI font: Tajawal (Boutros International), SIL OFL 1.1.
+• Place data: © OpenStreetMap contributors (ODbL) via Nominatim and Overpass. Weather: Open-Meteo.com (CC BY 4.0). Prayer times: AlAdhan. Radio lists: mp3quran.net and Radio-Browser. Word-by-word meanings: ummahapi.com. Recitation audio: Islamic Network.
+''',
+    'de': '''
+Weitere Daten, Schriften und Dienste:
+• Korantext: quran-json 3.1.2 (risan/quran-json), CC BY 4.0, basierend auf Tanzil.net — in der App enthalten.
+• Mushaf-Seitenaufteilung: madani-muhsaf-json (hamzakat), MIT-Lizenz — enthalten.
+• Adhkar: Islamic Pro Azkar API, MIT-Lizenz — enthalten.
+• Koranschriften: Amiri Quran (SIL OFL 1.1); KFGQPC Uthmanic Script HAFS und QPC Hafs © King Fahd Glorious Quran Printing Complex (kostenlos nutzbar und unverändert weitergebbar).
+• Oberflächenschrift: Tajawal (Boutros International), SIL OFL 1.1.
+• Ortsdaten: © OpenStreetMap-Mitwirkende (ODbL) über Nominatim und Overpass. Wetter: Open-Meteo.com (CC BY 4.0). Gebetszeiten: AlAdhan. Radiolisten: mp3quran.net und Radio-Browser. Wort-für-Wort: ummahapi.com. Rezitation: Islamic Network.
+''',
+    'tr': '''
+Ek veriler, yazı tipleri ve hizmetler:
+• Kur'an metni: quran-json 3.1.2 (risan/quran-json), CC BY 4.0, Tanzil.net tabanlı — uygulamaya gömülüdür.
+• Mushaf sayfa düzeni: madani-muhsaf-json (hamzakat), MIT lisansı — gömülüdür.
+• Zikirler: Islamic Pro Azkar API, MIT lisansı — gömülüdür.
+• Kur'an yazı tipleri: Amiri Quran (SIL OFL 1.1); KFGQPC Uthmanic Script HAFS ve QPC Hafs © Kral Fahd Kur'an Basım Kompleksi (ücretsiz kullanılabilir, değiştirilmeden dağıtılabilir).
+• Arayüz yazı tipi: Tajawal (Boutros International), SIL OFL 1.1.
+• Yer verileri: © OpenStreetMap katkıda bulunanlar (ODbL), Nominatim ve Overpass üzerinden. Hava durumu: Open-Meteo.com (CC BY 4.0). Namaz vakitleri: AlAdhan. Radyo listeleri: mp3quran.net ve Radio-Browser. Kelime kelime anlamlar: ummahapi.com. Tilavet: Islamic Network.
+''',
+  };
 
   /// Kept for call sites not yet migrated to [sourcesAndLicensesFor];
   /// prefer the localized version in new code.

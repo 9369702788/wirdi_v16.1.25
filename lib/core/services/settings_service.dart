@@ -303,7 +303,11 @@ class AppSettings extends ChangeNotifier {
     _adhanId = prefs.getString('settings_adhan_id') ?? 'a9';
     _showTransliteration = prefs.getBool('settings_show_transliteration') ?? false;
     _showTajweedColoring = prefs.getBool('settings_show_tajweed_coloring') ?? true;
-    _quranFontFamily = prefs.getString('settings_quran_font_family') ?? 'default';
+    // Fonts removed in v1.54 (licence terms did not allow redistribution):
+    // fall back to the default font if one of them was saved earlier.
+    const removedQuranFonts = {'QuranAlQuranNeo', 'QuranIndopakNastaleeq', 'QuranMeQuranVolt'};
+    final storedQuranFont = prefs.getString('settings_quran_font_family') ?? 'default';
+    _quranFontFamily = removedQuranFonts.contains(storedQuranFont) ? 'default' : storedQuranFont;
 
     final storedDailyReminders = prefs.getString('settings_daily_reminders_json');
     if (storedDailyReminders != null) {

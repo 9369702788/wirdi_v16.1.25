@@ -17,6 +17,10 @@ class RadioStation {
     this.imageUrl, this.stationUuid,
   });
 
+  /// Cleartext traffic is disabled app-wide (network_security_config), so only
+  /// https:// streams can ever play.
+  static bool isSecureUrl(String url) => url.trim().toLowerCase().startsWith('https://');
+
   factory RadioStation.fromDataRosy(Map<String, dynamic> j) {
     final name = j['name'] as String? ?? '';
     return RadioStation(
@@ -98,7 +102,7 @@ class RadioStation {
       countryCode: apiCountryCode.isNotEmpty ? apiCountryCode.toUpperCase() : _guessCountryCode(name),
       category: _guessCategory(name),
       isOfficial: false,
-      imageUrl: (j['favicon'] as String?)?.trim().isNotEmpty == true ? (j['favicon'] as String).trim() : null,
+      imageUrl: (j['favicon'] as String?)?.trim().startsWith('https://') == true ? (j['favicon'] as String).trim() : null,
       stationUuid: uuid,
     );
   }

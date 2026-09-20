@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,9 +13,11 @@ import 'local_cache_service.dart';
 ///
 /// Strategy: if a cached copy exists, return it immediately (fast, works
 /// with no connection) and refresh from network in the background so the
-/// next launch has fresh data. If there is no cache yet, fetch from
-/// network and cache the result. If the network fetch fails and there is
-/// no cache, the error is rethrown so the UI can show a real error state.
+/// next launch has fresh data. If there is no cache yet (first launch), the
+/// bundled copy (assets/data/quran.json) is served immediately and the cache
+/// is filled from the network in the background. A forced refresh that fails
+/// falls back to the cache, then to the bundled copy; the error is rethrown
+/// only if every source is unavailable.
 class QuranRepository {
   static Future<Map<String, dynamic>?> getSurahSummary(int surahNumber) async {
     final summaries = {
@@ -43,6 +46,20 @@ class QuranRepository {
 
   static const String _cacheKey = 'cache_quran_json_v1';
 
+  /// Bundled copy of the SAME pinned dataset [AppSources.quranJsonUrl] points
+  /// at (quran-json 3.1.2, CC-BY-4.0, Tanzil-based). It makes the very first
+  /// launch work with no connection and removes the hard dependency on the CDN.
+  static const String _bundledAsset = 'assets/data/quran.json';
+
+  static Future<String?> _loadBundled() async {
+    try {
+      return await rootBundle.loadString(_bundledAsset);
+    } catch (e, st) {
+      AppLogger.error('Bundled Quran asset could not be read', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
   static Future<List<SurahModel>> load({bool forceRefresh = false}) async {
     if (!forceRefresh) {
       final cached = await LocalCacheService.getString(_cacheKey);
@@ -51,6 +68,14 @@ class QuranRepository {
         // ignore: unawaited_futures
         _refreshInBackground();
         return _parse(cached);
+      }
+      // No cache yet (first launch): serve the bundled copy immediately and
+      // fill the cache from the network in the background.
+      final bundled = await _loadBundled();
+      if (bundled != null) {
+        // ignore: unawaited_futures
+        _refreshInBackground();
+        return _parse(bundled);
       }
     }
 
@@ -63,6 +88,11 @@ class QuranRepository {
       if (cached != null) {
         AppLogger.error('Quran fetch failed, falling back to cache', error: e, stackTrace: st);
         return _parse(cached);
+      }
+      final bundled = await _loadBundled();
+      if (bundled != null) {
+        AppLogger.error('Quran fetch failed, falling back to bundled copy', error: e, stackTrace: st);
+        return _parse(bundled);
       }
       AppLogger.error('Quran fetch failed with no cache available', error: e, stackTrace: st);
       rethrow;

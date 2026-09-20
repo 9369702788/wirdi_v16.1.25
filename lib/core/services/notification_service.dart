@@ -138,7 +138,7 @@ class NotificationService {
 
     static Future<void> initialize() async {
     if (_initialized) return;
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings('ic_stat_wirdi');
     const iosInit = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,

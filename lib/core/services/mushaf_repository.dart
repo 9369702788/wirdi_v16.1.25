@@ -1,75 +1,37 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart' show rootBundle;
 
-import '../data/app_sources.dart';
 import '../models/mushaf_models.dart';
 import 'app_logger.dart';
-import 'local_cache_service.dart';
 
-/// Offline-first repository for the real 604-page Madani Mushaf
-/// ayah-to-page mapping, used to render a genuine page-by-page reading
-/// view (as opposed to the continuous per-surah list view).
+/// Repository for the real 604-page Madani Mushaf ayah-to-page mapping, used to
+/// render a genuine page-by-page reading view (as opposed to the continuous
+/// per-surah list view).
+///
+/// v1.54: the dataset (hamzakat/madani-muhsaf-json, MIT licence) is BUNDLED in
+/// assets/data/mushaf_pages.json instead of being downloaded from a personal
+/// GitHub repository's unpinned `main` branch at runtime. The Quran text shown
+/// is therefore exactly what shipped in the reviewed release, and the page view
+/// works offline from the first launch.
 class MushafRepository {
   MushafRepository._();
 
-  static const String _cacheKey = 'cache_mushaf_pages_json_v1';
+  static const String _bundledAsset = 'assets/data/mushaf_pages.json';
   static List<MushafPage>? _memoryCache;
 
+  /// [forceRefresh] is kept for source compatibility with existing callers.
   static Future<List<MushafPage>> load({bool forceRefresh = false}) async {
     if (_memoryCache != null && !forceRefresh) return _memoryCache!;
-
-    if (!forceRefresh) {
-      final cached = await LocalCacheService.getString(_cacheKey);
-      if (cached != null) {
-        // ignore: unawaited_futures
-        _refreshInBackground();
-        _memoryCache = await compute(_parse, cached);
-        return _memoryCache!;
-      }
-    }
-
     try {
-      final raw = await _fetchRaw();
-      await LocalCacheService.setString(_cacheKey, raw);
+      final raw = await rootBundle.loadString(_bundledAsset);
       _memoryCache = await compute(_parse, raw);
       return _memoryCache!;
     } catch (e, st) {
-      final cached = await LocalCacheService.getString(_cacheKey);
-      if (cached != null) {
-        AppLogger.error('Mushaf pages fetch failed, falling back to cache', error: e, stackTrace: st);
-        _memoryCache = await compute(_parse, cached);
-        return _memoryCache!;
-      }
-      AppLogger.error('Mushaf pages fetch failed with no cache available', error: e, stackTrace: st);
+      AppLogger.error('Bundled Mushaf pages could not be read', error: e, stackTrace: st);
       rethrow;
     }
-  }
-
-  static Future<void> _refreshInBackground() async {
-    try {
-      final raw = await _fetchRaw();
-      await LocalCacheService.setString(_cacheKey, raw);
-      _memoryCache = await compute(_parse, raw);
-    } catch (e, st) {
-      AppLogger.error('Mushaf pages background refresh failed, serving cached copy', error: e, stackTrace: st);
-    }
-  }
-
-  static Future<String> _fetchRaw() async {
-    final response = await http.get(
-      Uri.parse(AppSources.mushafPagesJsonUrl),
-      headers: {'Accept': 'application/json'},
-    ).timeout(const Duration(seconds: 45));
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load Mushaf pages (HTTP ${response.statusCode})');
-    }
-    // Explicitly decode as UTF-8 — response.body defaults to
-    // Latin-1 when a server doesn't declare charset=utf-8, which
-    // mangles Arabic text into unreadable symbols.
-    return utf8.decode(response.bodyBytes);
   }
 
   /// The source file is a 605-length array; index 0 is empty/unused and

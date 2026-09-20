@@ -120,7 +120,8 @@ class RadioService extends ChangeNotifier {
         if (list.isEmpty) return;
         succeededSources.add(label);
         for (final s in list) {
-          if (s.streamUrl.isNotEmpty) combined[s.streamUrl] = s;
+          // HTTPS only: cleartext traffic is disabled app-wide, so http:// streams could never play.
+          if (RadioStation.isSecureUrl(s.streamUrl)) combined[s.streamUrl] = s;
         }
       } catch (e) {
         debugPrint('[Radio] $label error: $e');
@@ -129,8 +130,6 @@ class RadioService extends ChangeNotifier {
 
     await mergeFrom(_fetchMp3Quran, 'mp3quran.net');
     await mergeFrom(_fetchRadioBrowser, 'Radio-Browser');
-    await mergeFrom(_fetchDataRosy, 'data-rosy');
-    await mergeFrom(_fetchUthumany, 'Islamic Radio API');
 
     if (combined.isNotEmpty) {
       _liveStations = combined.values.toList();
@@ -173,7 +172,8 @@ class RadioService extends ChangeNotifier {
   /// merging -- deduplicated by stationuuid, same pattern _doRefresh()
   /// already uses across whole SOURCES -- multiplies the real, verified
   /// catalog size using only the existing trusted mechanism.
-  static const _radioBrowserTags = ['quran', 'islam', 'islamic', 'coran', 'tilawah', 'quran radio'];
+  // Generic tags ('islam', 'islamic') were dropped in v1.54: they returned unmoderated, non-Quran content.
+  static const _radioBrowserTags = ['quran', 'coran', 'tilawah', 'quran radio'];
 
   Future<List<RadioStation>> _fetchRadioBrowser() async {
     final merged = <String, RadioStation>{};
@@ -195,34 +195,6 @@ class RadioService extends ChangeNotifier {
       }
     }
     return merged.values.toList();
-  }
-
-  Future<List<RadioStation>> _fetchDataRosy() async {
-    final resp = await http.get(
-      Uri.parse('https://data-rosy.vercel.app/radio.json'),
-      headers: {'User-Agent': 'WirdiApp/1.51'},
-    ).timeout(const Duration(seconds: 10));
-    if (resp.statusCode != 200) return const [];
-    final List<dynamic> data = jsonDecode(resp.body);
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(RadioStation.fromDataRosy)
-        .where((s) => s.streamUrl.isNotEmpty)
-        .toList();
-  }
-
-  Future<List<RadioStation>> _fetchUthumany() async {
-    final resp = await http.get(
-      Uri.parse('https://raw.githubusercontent.com/uthumany/radio-api/main/client/public/api/stations.json'),
-      headers: {'User-Agent': 'WirdiApp/1.51'},
-    ).timeout(const Duration(seconds: 10));
-    if (resp.statusCode != 200) return const [];
-    final List<dynamic> data = jsonDecode(resp.body);
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(RadioStation.fromUthumany)
-        .where((s) => s.streamUrl.isNotEmpty)
-        .toList();
   }
 
   // ── Playback ─────────────────────────────────────────────────────

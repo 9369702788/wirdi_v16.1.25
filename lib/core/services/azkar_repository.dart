@@ -1,69 +1,35 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart' show rootBundle;
 
-import '../data/app_sources.dart';
 import '../models/azkar_models.dart';
 import 'app_logger.dart';
-import 'local_cache_service.dart';
 
-/// Offline-first repository for the full Hisn Al Muslim azkar collection.
-/// Same cache-first / background-refresh strategy as [QuranRepository].
+/// Repository for the full Hisn Al Muslim azkar collection.
+///
+/// The dataset (Islamic Pro Azkar API, MIT licence) is BUNDLED with the app
+/// (assets/data/azkar.json). Religious text is deliberately not fetched from a
+/// third-party GitHub repository at runtime: the content shown to users is
+/// exactly what shipped in the reviewed release, and it works fully offline.
 class AzkarRepository {
   AzkarRepository._();
 
-  static const String _cacheKey = 'cache_azkar_json_v1';
+  static const String _bundledAsset = 'assets/data/azkar.json';
 
+  /// [forceRefresh] is accepted for source compatibility with existing callers
+  /// (retry / "refresh data" buttons); the data is local so it just re-reads it.
   static Future<List<AzkarCategoryModel>> load({bool forceRefresh = false}) async {
-    if (!forceRefresh) {
-      final cached = await LocalCacheService.getString(_cacheKey);
-      if (cached != null) {
-        // ignore: unawaited_futures
-        _refreshInBackground();
-        return _parse(cached);
-      }
-    }
-
     try {
-      final raw = await _fetchRaw();
-      await LocalCacheService.setString(_cacheKey, raw);
+      final raw = await rootBundle.loadString(_bundledAsset);
       return _parse(raw);
     } catch (e, st) {
-      final cached = await LocalCacheService.getString(_cacheKey);
-      if (cached != null) {
-        AppLogger.error('Azkar fetch failed, falling back to cache', error: e, stackTrace: st);
-        return _parse(cached);
-      }
-      AppLogger.error('Azkar fetch failed with no cache available', error: e, stackTrace: st);
+      AppLogger.error('Bundled Azkar dataset could not be read', error: e, stackTrace: st);
       rethrow;
     }
   }
 
-  static Future<void> _refreshInBackground() async {
-    try {
-      final raw = await _fetchRaw();
-      await LocalCacheService.setString(_cacheKey, raw);
-    } catch (e, st) {
-      AppLogger.error('Azkar background refresh failed, serving cached copy', error: e, stackTrace: st);
-    }
-  }
-
-  static Future<String> _fetchRaw() async {
-    final response = await http
-        .get(Uri.parse(AppSources.azkarJsonUrl))
-        .timeout(const Duration(seconds: 20));
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load Azkar (HTTP ${response.statusCode})');
-    }
-
-    // Explicitly decode as UTF-8 — response.body defaults to
-    // Latin-1 when a server doesn't declare charset=utf-8, which
-    // mangles Arabic text into unreadable symbols.
-    return utf8.decode(response.bodyBytes);
-  }
-
-  static Future<DateTime?> cachedAt() => LocalCacheService.getCachedAt(_cacheKey);
+  /// Data is bundled, so there is no download timestamp.
+  static Future<DateTime?> cachedAt() async => null;
 
   static List<AzkarCategoryModel> _parse(String raw) {
     final decoded = jsonDecode(raw);
