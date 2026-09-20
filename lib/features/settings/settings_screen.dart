@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../auth/account_screen.dart';
+import '../../shared/widgets/mosaic_background.dart';
 import 'theme_selection_screen.dart';
 import 'about_screen.dart';
 import 'privacy_center_screen.dart';
@@ -214,7 +215,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final l10n = AppLocalizations.of(context);
     final languageCode = Localizations.localeOf(context).languageCode;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.settingsTitle), centerTitle: true),
+      appBar: AppBar(
+        foregroundColor: Colors.white,
+        flexibleSpace: const MosaicBackground(col: 0, row: 0, opacity: 0.45),
+        title: Text(l10n.settingsTitle),
+        centerTitle: true,
+      ),
       body: ListenableBuilder(
         listenable: appSettings,
         builder: (context, _) {

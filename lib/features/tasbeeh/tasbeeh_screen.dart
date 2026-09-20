@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/user_progress_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../l10n/generated/app_localizations.dart';
+import '../../shared/widgets/mosaic_background.dart';
 
 class _TasbeehPhrase {
   final String id;
@@ -227,6 +228,8 @@ class _TasbeehScreenState extends State<TasbeehScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        foregroundColor: Colors.white,
+        flexibleSpace: const MosaicBackground(col: 1, row: 1, opacity: 0.45),
         title: Text(l10n.tasbeehTitle),
         centerTitle: true,
         actions: [
