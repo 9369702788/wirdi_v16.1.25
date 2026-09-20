@@ -23,7 +23,6 @@ import 'package:intl/intl.dart' hide TextDirection;
 import '../../core/data/adhan_option.dart';
 import '../../core/services/audio_download_service.dart';
 import '../../core/services/adhan_audio_cache.dart';
-import '../../core/services/azkar_repository.dart';
 import '../../core/services/notification_service.dart';
 import 'notification_diagnostics_screen.dart';
 import '../../core/services/daily_reminder_scheduler.dart';
@@ -49,7 +48,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final AudioPlayer _previewPlayer = AudioPlayer();
   String? _previewingAdhanId;
   DateTime? _quranCachedAt;
-  DateTime? _azkarCachedAt;
   int _downloadedAudioBytes = 0;
   String _selectedMathhab = 'Shafi\'i'; // matches MathhabService's default; _loadMathhab() overwrites this from storage anyway
   String? _realAppVersion;
@@ -146,11 +144,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadCacheInfo() async {
     final quranAt = await QuranRepository.cachedAt();
-    final azkarAt = await AzkarRepository.cachedAt();
     if (mounted) {
       setState(() {
         _quranCachedAt = quranAt;
-        _azkarCachedAt = azkarAt;
       });
     }
   }
@@ -934,18 +930,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const Divider(height: 1),
                     ListTile(
-                      leading: const Icon(Icons.favorite_outline, color: AppColors.mutedText),
-                      title: Text(l10n.settingsAzkarLastUpdate),
-                      subtitle: Text(_formatCacheDate(_azkarCachedAt, languageCode, l10n)),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
                       leading: Icon(Icons.refresh, color: AppColors.primaryEmerald),
                       title: Text(l10n.settingsUpdateNow),
                       subtitle: Text(l10n.settingsRequiresInternet),
                       onTap: () async {
                         await QuranRepository.load(forceRefresh: true);
-                        await AzkarRepository.load(forceRefresh: true);
                         await _loadCacheInfo();
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
