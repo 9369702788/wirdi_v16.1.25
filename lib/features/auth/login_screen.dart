@@ -142,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 20),
         Row(children: [const Expanded(child: Divider(color: Colors.white30)), Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text(l.authOrContinueWith, style: const TextStyle(color: Colors.white54, fontSize: 12))), const Expanded(child: Divider(color: Colors.white30))]),
         const SizedBox(height: 20),
-        _Soc(label: l.authSignInWithGoogle, icon: Icons.g_mobiledata_rounded, onPressed: _loading ? null : () => _go(() async { final c = await AuthService.instance.signInWithGoogle(); if (c==null) throw Exception('cancelled'); await SyncService.instance.syncOnSignIn(); })),
+        _Soc(label: l.authSignInWithGoogle, icon: Icons.g_mobiledata_rounded, onPressed: _loading ? null : () => _go(() async { final c = await AuthService.instance.signInWithGoogle(); if (c==null) throw _ValidationFailedSilently(); await SyncService.instance.syncOnSignIn(); })),
         // Apple Sign-In temporarily removed from the UI per explicit request.
         // AuthService.instance.signInWithApple() is left intact for a quick re-add later.
         const SizedBox(height: 28),

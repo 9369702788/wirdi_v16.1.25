@@ -27,9 +27,6 @@ const Map<String, String> _quranFontFamilies = {
   'default': '',
   'QuranQPCHafs': 'QuranQPCHafs',
   'QuranKFGQPCUthmanic': 'QuranKFGQPCUthmanic',
-  'QuranAlQuranNeo': 'QuranAlQuranNeo',
-  'QuranIndopakNastaleeq': 'QuranIndopakNastaleeq',
-  'QuranMeQuranVolt': 'QuranMeQuranVolt',
 };
 
 /// Quran reader built on Wirdi's own QuranRepository (same source as the
