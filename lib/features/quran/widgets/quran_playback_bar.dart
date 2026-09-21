@@ -10,11 +10,26 @@ class QuranPlaybackBar extends StatelessWidget {
     return ListenableBuilder(
       listenable: quranAudio,
       builder: (context, _) {
-        if (quranAudio.playingAyah == null) return const SizedBox.shrink();
+        final currentAyah = quranAudio.playingAyah;
+        if (currentAyah == null) return const SizedBox.shrink();
+
+        // Surah-wide progress: how far through the whole surah (or active
+        // range) playback is, not just the current ayah. Each ayah
+        // occupies one unit on the slider; the fractional part comes
+        // from how far into that ayah's own audio we are, so the bar
+        // still animates smoothly as it plays instead of jumping once
+        // per ayah.
+        final start = quranAudio.rangeStartAyah;
+        final end = quranAudio.rangeEndAyah;
+        final totalInRange = (end - start + 1) < 1 ? 1 : (end - start + 1);
         final position = quranAudio.position;
         final duration = quranAudio.duration;
-        final max = duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1.0;
-        final value = position.inMilliseconds.clamp(0, max.toInt()).toDouble();
+        final withinAyahFraction = duration.inMilliseconds > 0
+            ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble()
+            : 0.0;
+        final ayahIndexInRange = (currentAyah - start).clamp(0, totalInRange - 1).toInt();
+        final value = (ayahIndexInRange + withinAyahFraction).clamp(0.0, totalInRange.toDouble()).toDouble();
+
         final isAr = Localizations.localeOf(context).languageCode == 'ar';
         final surahName = quranAudio.currentSurahName ?? (isAr ? 'سورة' : 'Surah');
         return Material(
@@ -28,8 +43,11 @@ class QuranPlaybackBar extends StatelessWidget {
                 Slider(
                   value: value,
                   min: 0,
-                  max: max,
-                  onChanged: duration.inMilliseconds > 0 ? (v) => quranAudio.seek(Duration(milliseconds: v.round())) : null,
+                  max: totalInRange.toDouble(),
+                  onChanged: (v) {
+                    final targetAyah = start + v.floor();
+                    quranAudio.seekToAyah(targetAyah);
+                  },
                   activeColor: AppColors.goldAccent,
                   inactiveColor: Colors.white24,
                 ),
@@ -38,7 +56,7 @@ class QuranPlaybackBar extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        isAr ? '$surahName • آية ${quranAudio.playingAyah ?? '-'}' : '$surahName • Ayah ${quranAudio.playingAyah ?? '-'}',
+                        isAr ? '$surahName • آية $currentAyah من $end' : '$surahName • Ayah $currentAyah of $end',
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                       ),
