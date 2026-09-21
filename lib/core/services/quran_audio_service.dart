@@ -53,13 +53,25 @@ class QuranAudioService extends ChangeNotifier {
   /// only tries to resume [_standby] when this matches the ayah it's
   /// advancing to; otherwise it falls back to a normal fresh fetch.
   int? _preloadedAyah;
-  bool _advanceInProgress = false;
 
   /// The surah currently loaded for playback, or null if nothing is
   /// playing. Exposed for UI (e.g. a global mini-player) that needs to
   /// display what's playing without already knowing the surah number.
   int? get currentSurahNumber => _surahNumber;
   String? get currentSurahName => _surahName;
+
+  /// Total ayah count of the surah currently loaded (0 if nothing loaded).
+  /// Used by the UI to show progress across the whole surah rather than
+  /// just the ayah currently playing.
+  int get totalAyahsInSurah => _totalAyahsInSurah;
+
+  /// First ayah of the active playback range -- 1 unless [playRange] was
+  /// used to start from partway through the surah.
+  int get rangeStartAyah => _rangeStartAyah ?? 1;
+
+  /// Last ayah of the active playback range -- the surah's last ayah
+  /// unless [playRange] was used to stop partway through.
+  int get rangeEndAyah => _rangeEndAyah ?? _totalAyahsInSurah;
 
   bool isPlayingFor(int surahNumber, int ayahNumber) =>
       _surahNumber == surahNumber && playingAyah == ayahNumber;
@@ -84,14 +96,12 @@ class QuranAudioService extends ChangeNotifier {
       if (playerA == _active) {
         position = p;
         notifyListeners();
-        _maybeAdvanceBeforeGap(p);
       }
     });
     playerB.onPositionChanged.listen((p) {
       if (playerB == _active) {
         position = p;
         notifyListeners();
-        _maybeAdvanceBeforeGap(p);
       }
     });
     playerA.onDurationChanged.listen((d) {
@@ -197,6 +207,27 @@ class QuranAudioService extends ChangeNotifier {
     }
   }
 
+  /// Jumps directly to [ayahNumber] within the surah/range currently
+  /// loaded (clamped to that range), for a surah-wide progress bar that
+  /// lets the user drag anywhere in the surah rather than only seeking
+  /// inside whichever ayah happens to be playing. Reuses the surah
+  /// context already captured by [playAyah]/[playWholeSurah]/[playRange],
+  /// so it doesn't need the surah model passed in again. Resumes
+  /// sequential whole-surah playback from the target ayah onward.
+  Future<void> seekToAyah(int ayahNumber) async {
+    if (_surahNumber == null) return;
+    final start = rangeStartAyah;
+    final end = rangeEndAyah;
+    var target = ayahNumber;
+    if (target < start) target = start;
+    if (target > end) target = end;
+    if (target == playingAyah) return;
+    playingWholeSurah = true;
+    repeatCurrent = false;
+    await _playAyahAudio(target);
+    _preloadNext(target + 1);
+  }
+
   Future<void> _playAyahAudio(int ayahNumber) async {
     final globalNumber = _surahAyahOffset + ayahNumber;
     playingAyah = ayahNumber;
@@ -283,22 +314,8 @@ class QuranAudioService extends ChangeNotifier {
     _preloadNext(nextAyah + 1);
   }
 
-  void _maybeAdvanceBeforeGap(Duration currentPosition) {
-    if (!playingWholeSurah || playingAyah == null || _advanceInProgress) return;
-    if (duration <= Duration.zero) return;
-    final nextAyah = playingAyah! + 1;
-    final effectiveEnd = _rangeEndAyah ?? _totalAyahsInSurah;
-    if (nextAyah > effectiveEnd || _preloadedAyah != nextAyah) return;
-    final remaining = duration - currentPosition;
-    if (remaining <= const Duration(milliseconds: 220)) {
-      _advanceInProgress = true;
-      _advanceSequential(nextAyah).whenComplete(() => _advanceInProgress = false);
-    }
-  }
-
   void _handleComplete(AudioPlayer source) {
     if (source != _active) return; // stray event from the preloading standby player
-    if (_advanceInProgress) return;
 
     if (repeatCurrent && playingAyah != null) {
       if (_consumeRepeatCredit()) {
@@ -394,7 +411,6 @@ class QuranAudioService extends ChangeNotifier {
     _rangeStartAyah = null;
     _rangeEndAyah = null;
     _preloadedAyah = null;
-    _advanceInProgress = false;
     position = Duration.zero;
     duration = Duration.zero;
     notifyListeners();
