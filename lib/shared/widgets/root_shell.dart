@@ -4,6 +4,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/services/prayer_service.dart';
 import '../../core/services/prayer_notification_scheduler.dart';
+import '../../core/services/daily_reminder_scheduler.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/models/prayer_models.dart';
 
@@ -35,6 +36,13 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _rememberTimezoneOffset();
+
+    // v1.55: keep the recurring (daily/Friday) reminders on the right local hour
+    // after a DST or time-zone change, even if the app was closed when it happened.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      DailyReminderScheduler.rescheduleIfTimeZoneChanged(AppLocalizations.of(context)).catchError((_) {});
+    });
 
     // Surfaces a background-notification setup failure directly in the
     // app -- previously this only ever went to a debugPrint nobody could
@@ -97,6 +105,8 @@ class _RootShellState extends State<RootShell> with WidgetsBindingObserver {
       final result = await PrayerService.fetchUsingSavedPreference();
       if (!mounted) return;
       await PrayerNotificationScheduler.rescheduleFromResult(context, result);
+      if (!mounted) return;
+      await DailyReminderScheduler.rescheduleIfTimeZoneChanged(AppLocalizations.of(context));
     } catch (_) {
       // Best effort: the next normal prayer-time refresh will recover.
     }

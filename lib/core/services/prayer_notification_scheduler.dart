@@ -81,16 +81,25 @@ class PrayerNotificationScheduler {
     final today = DateTime.now();
     addFor(result.prayers, today);
 
-    final tomorrowPrayers = await PrayerService.fetchTomorrowPrayers();
-    if (tomorrowPrayers != null) {
-      addFor(tomorrowPrayers, today.add(const Duration(days: 1)));
+    // v1.55: schedule the next 14 days ahead (was: today + tomorrow only, so
+    // the adhan stopped after ~2 days without opening the app). One calendar
+    // request per month covers the whole window.
+    final upcomingDays = await PrayerService.fetchUpcomingPrayers(days: 14);
+    final orderedDays = upcomingDays.keys.toList()..sort();
+    for (final day in orderedDays) {
+      addFor(upcomingDays[day]!, day);
     }
 
-    await NotificationService.scheduleAll(notifications);
+    // If the calendar couldn't be fetched (offline), keep the notifications that
+    // are already scheduled for later days instead of wiping them.
+    await NotificationService.scheduleAll(notifications, keepFuture: upcomingDays.isEmpty);
 
     if (appSettings.ongoingPrayerNotificationEnabled) {
       final now = DateTime.now();
-      final upcoming = <PrayerItem>[...result.prayers, if (tomorrowPrayers != null) ...tomorrowPrayers]
+      final upcoming = <PrayerItem>[
+        ...result.prayers,
+        for (final day in orderedDays) ...upcomingDays[day]!,
+      ]
           .where((p) => p.dateTime.isAfter(now))
           .toList()
         ..sort((a, b) => a.dateTime.compareTo(b.dateTime));

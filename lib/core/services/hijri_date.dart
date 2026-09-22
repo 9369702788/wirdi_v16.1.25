@@ -52,8 +52,14 @@ class HijriDate {
   /// one — real observed Hijri dates can differ by a day depending on
   /// region and lunar sighting, same caveat that applies to any
   /// arithmetic Hijri calculation without an official lookup table.
+  /// Manual correction in days (-2..+2) chosen by the user in Settings, so the
+  /// calculated date can follow the local moon-sighting / official announcement.
+  /// Applied to every conversion, so all screens and reminders agree.
+  static int dayOffset = 0;
+
   factory HijriDate.fromGregorian(DateTime date) {
-    final jd = _gregorianToJulianDay(date.year, date.month, date.day);
+    final adjusted = dayOffset == 0 ? date : DateTime(date.year, date.month, date.day + dayOffset);
+    final jd = _gregorianToJulianDay(adjusted.year, adjusted.month, adjusted.day);
 
     var l = jd - 1948440 + 10632;
     final n = (l - 1) ~/ 10631;

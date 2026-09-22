@@ -31,11 +31,21 @@ class WirdiAudioHandler extends BaseAudioHandler {
     }
   }
 
+  /// Last state published for Quran playback. Position ticks arrive several
+  /// times a second; the OS media session extrapolates the position itself, so
+  /// only real state changes (ayah, pause, speed, total) are republished.
+  String? _lastQuranKey;
+
   void _onQuranChanged() {
     if (_quranActive) {
+      final key = '${quranAudio.currentSurahNumber}|${quranAudio.playingAyah}|${quranAudio.isPaused}|'
+          '${quranAudio.isBuffering}|${quranAudio.playbackRate}|${quranAudio.surahEstimatedTotal.inSeconds}';
+      if (key == _lastQuranKey) return;
+      _lastQuranKey = key;
       _publishQuranState();
-    } else if (!_radioActive) {
-      _publishIdle();
+    } else {
+      _lastQuranKey = null;
+      if (!_radioActive) _publishIdle();
     }
   }
 
@@ -78,10 +88,13 @@ class WirdiAudioHandler extends BaseAudioHandler {
     final ayah = q.playingAyah;
     if (ayah == null) return;
 
+    final total = q.totalAyahsInSurah;
     mediaItem.add(MediaItem(
-      id: 'quran_ayah_$ayah',
-      title: q.playingWholeSurah ? 'Reciting Surah -- Ayah $ayah' : 'Ayah $ayah',
-      artist: 'Wirdi -- Quran Recitation',
+      id: 'quran_surah_${q.currentSurahNumber ?? 0}',
+      title: q.currentSurahName ?? 'Quran',
+      artist: total > 0 ? 'Ayah $ayah / $total  -  Wirdi' : 'Ayah $ayah  -  Wirdi',
+      // Surah-level length (an estimate until every ayah has been measured).
+      duration: q.surahEstimatedTotal > Duration.zero ? q.surahEstimatedTotal : null,
     ));
 
     playbackState.add(playbackState.value.copyWith(
@@ -99,6 +112,8 @@ class WirdiAudioHandler extends BaseAudioHandler {
           ? AudioProcessingState.loading
           : AudioProcessingState.ready,
       playing: !q.isPaused,
+      updatePosition: q.surahElapsed,
+      speed: q.playbackRate,
     ));
   }
 

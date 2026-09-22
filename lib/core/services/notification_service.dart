@@ -568,10 +568,18 @@ class NotificationService {
     }
   }
 
-  static Future<void> scheduleAll(List<ScheduledPrayerNotification> notifications) async {
+  /// Schedules [notifications]. Normally every previously scheduled prayer
+  /// notification is cancelled first. With [keepFuture] the existing ones are
+  /// left in place (same ids are simply replaced) - used when the upcoming
+  /// days could not be fetched, so an offline refresh doesn't erase them.
+  static Future<void> scheduleAll(List<ScheduledPrayerNotification> notifications, {bool keepFuture = false}) async {
     await initialize();
     await _ensureTimezone();
-    await cancelAllScheduled();
+    final previousPrefs = await SharedPreferences.getInstance();
+    final previousIds = keepFuture ? (previousPrefs.getStringList(_scheduledIdsKey) ?? const <String>[]) : const <String>[];
+    if (!keepFuture) {
+      await cancelAllScheduled();
+    }
 
     final now = DateTime.now();
     final scheduledIds = <String>[];
@@ -647,7 +655,7 @@ class NotificationService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_scheduledIdsKey, scheduledIds);
+    await prefs.setStringList(_scheduledIdsKey, <String>{...previousIds, ...scheduledIds}.toList());
   }
 
 }

@@ -12,6 +12,12 @@ class AppSources {
   /// While empty, no contact line is shown.
   static const String privacyContactEmail = '';
 
+  /// User-Agent for OpenStreetMap services (Nominatim/Overpass require an
+  /// identifying agent with a way to contact the operator).
+  static String get httpUserAgent => privacyContactEmail.isEmpty
+      ? 'WirdiApp/1.55 (Islamic companion app for Android)'
+      : 'WirdiApp/1.55 (Islamic companion app for Android; contact: $privacyContactEmail)';
+
   static const String quranJsonUrl =
       'https://cdn.jsdelivr.net/npm/quran-json@3.1.2/dist/quran.json';
 
@@ -130,6 +136,14 @@ class AppSources {
     (2, '\u0627\u0644\u062c\u0645\u0639\u064a\u0629 \u0627\u0644\u0625\u0633\u0644\u0627\u0645\u064a\u0629 \u0644\u0623\u0645\u0631\u064a\u0643\u0627 \u0627\u0644\u0634\u0645\u0627\u0644\u064a\u0629 (ISNA)', 'ISNA (North America)'),
     (1, '\u062c\u0627\u0645\u0639\u0629 \u0627\u0644\u0639\u0644\u0648\u0645 \u0627\u0644\u0625\u0633\u0644\u0627\u0645\u064a\u0629\u060c \u0643\u0631\u0627\u062a\u0634\u064a', 'University of Islamic Sciences, Karachi'),
     (0, '\u0634\u0631\u0643\u0629 \u0645\u0648\u0627\u0642\u064a\u062a \u0627\u0644\u0635\u0644\u0627\u0629 \u062c\u064a\u0627\u0641', 'Shia Ithna-Ashari (Jafari)'),
+    (13, 'رئاسة الشؤون الدينية التركية (ديانت)', 'Diyanet, Turkey'),
+    (16, 'هيئة الشؤون الإسلامية والأوقاف بدبي', 'Dubai'),
+    (9, 'الكويت', 'Kuwait'),
+    (10, 'قطر', 'Qatar'),
+    (17, 'ماليزيا (جاكيم)', 'JAKIM, Malaysia'),
+    (20, 'إندونيسيا (وزارة الشؤون الدينية)', 'KEMENAG, Indonesia'),
+    (21, 'وزارة الأوقاف المغربية', 'Morocco'),
+    (12, 'اتحاد المنظمات الإسلامية في فرنسا', 'France (UOIF)'),
   ];
 
   static String prayerCalendarUrl({
@@ -138,8 +152,9 @@ class AppSources {
     required int month,
     required int year,
     int method = 5,
+    int school = 0,
   }) {
-    return 'https://api.aladhan.com/v1/calendar?latitude=$latitude&longitude=$longitude&method=$method&month=$month&year=$year';
+    return 'https://api.aladhan.com/v1/calendar?latitude=$latitude&longitude=$longitude&method=$method&school=$school&month=$month&year=$year';
   }
 
   static String _ddmmyyyy(DateTime date) {

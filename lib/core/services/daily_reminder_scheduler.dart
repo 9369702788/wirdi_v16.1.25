@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../l10n/generated/app_localizations.dart';
 import 'notification_service.dart';
 import 'settings_service.dart';
@@ -11,7 +13,23 @@ class DailyReminderScheduler {
   static const _idDailyWird = 900000003;
   static const _idSleepAzkar = 900000004;
 
+  static const _offsetKey = 'daily_reminders_utc_offset_minutes_v1';
+
+  /// Recurring reminders repeat at a fixed clock time in the zone they were
+  /// scheduled with, so after a daylight-saving change (Egypt, Germany, ...) or
+  /// a change of time zone they would keep firing at the OLD local hour until
+  /// rescheduled. Called on app start: reschedules only when the device's UTC
+  /// offset differs from the one used the last time.
+  static Future<void> rescheduleIfTimeZoneChanged(AppLocalizations l10n) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = DateTime.now().timeZoneOffset.inMinutes;
+    if (prefs.getInt(_offsetKey) == current) return;
+    await rescheduleAll(l10n);
+  }
+
   static Future<String> rescheduleAll(AppLocalizations l10n) async {
+    final offsetPrefs = await SharedPreferences.getInstance();
+    await offsetPrefs.setInt(_offsetKey, DateTime.now().timeZoneOffset.inMinutes);
     final reminders = <RecurringReminder>[];
 
     final friday = appSettings.dailyReminder('friday');

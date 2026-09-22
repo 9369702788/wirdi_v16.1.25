@@ -1,3 +1,4 @@
+import '../data/app_sources.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -16,7 +17,6 @@ class NearbyPlacesService {
   static const List<String> _overpassEndpoints = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
-    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   ];
 
   static Future<List<NearbyPlace>> findMosques({
@@ -76,7 +76,7 @@ class NearbyPlacesService {
             .post(
               Uri.parse(endpoint),
               headers: {
-                'User-Agent': 'Wirdi-IslamicApp/1.53 (contact: support@wirdi.app)',
+                'User-Agent': AppSources.httpUserAgent,
                 'Accept': 'application/json',
               },
               body: {'data': overpassQuery},
@@ -146,7 +146,7 @@ class NearbyPlacesService {
       final response = await http.get(
         uri,
         headers: {
-          'User-Agent': 'Wirdi-IslamicApp/1.53 (contact: support@wirdi.app)',
+          'User-Agent': AppSources.httpUserAgent,
           'Accept-Language': 'ar,en',
         },
       ).timeout(const Duration(seconds: 12));

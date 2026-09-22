@@ -39,6 +39,14 @@ class FirestoreRulesNotPublishedException implements Exception {
       'go to Firestore Database > Rules, paste the rules from FIRESTORE_RULES.md, and click Publish.';
 }
 
+/// All Firestore documents (users/{uid}/data/{name}) that sync reads/writes.
+/// Single source of truth used by account deletion.
+const List<String> allSyncedDocumentNames = [
+  'settings', 'quran_progress', 'tasbeeh', 'profile', 'favorites', 'prayer_log', 'progress_stats',
+  'bookmarks', 'khatma', 'tasbeeh_custom', 'my_duas', 'custom_azkar', 'sadaqah', 'qada',
+  'muhasabah', 'recitation_mistakes',
+];
+
 class SyncService {
   SyncService._();
   static final SyncService instance = SyncService._();
@@ -265,6 +273,27 @@ class SyncService {
   /// comment for the full explanation of the key mismatches this
   /// corrects. Also drops the fake "achievements" download (nothing
   /// real ever wrote that key -- see achievement_service.dart).
+  // ---- Merge helpers (v1.55) ------------------------------------------------
+  // A download used to overwrite local values field by field, so anything done
+  // on THIS device since the last sync (a bigger streak, new favorites, today's
+  // prayer ticks) could be replaced by an older cloud copy. The rules now are:
+  // counters/totals keep the LARGER value, lists keep the UNION, per-day flags
+  // keep "done" if either side has it. (Trade-off: an item removed on another
+  // device can reappear; losing data is the worse failure.)
+  Future<void> _setIntMax(SharedPreferences prefs, String key, int cloud) async {
+    final local = prefs.getInt(key) ?? 0;
+    if (cloud > local) await prefs.setInt(key, cloud);
+  }
+
+  Future<void> _setListUnion(SharedPreferences prefs, String key, List<String> cloud) async {
+    final local = prefs.getStringList(key) ?? const <String>[];
+    final merged = <String>[...local];
+    for (final v in cloud) {
+      if (!merged.contains(v)) merged.add(v);
+    }
+    if (merged.length != local.length) await prefs.setStringList(key, merged);
+  }
+
   Future<void> downloadAll() async {
     if (_uid == null) throw NotSignedInException();
     _syncing = true;
@@ -307,7 +336,7 @@ class SyncService {
           if (d['lastSurahNumber'] != null) await prefs.setInt('last_surah_number', _asInt(d['lastSurahNumber']));
           if (d['lastSurahName'] is String) await prefs.setString('last_surah_name', d['lastSurahName']);
           if (d['lastAyahNumber'] != null) await prefs.setInt('last_ayah_number', _asInt(d['lastAyahNumber']));
-          if (d['lifetimePagesTotal'] != null) await prefs.setInt('wird_lifetime_pages_total', _asInt(d['lifetimePagesTotal']));
+          if (d['lifetimePagesTotal'] != null) await _setIntMax(prefs, 'wird_lifetime_pages_total', _asInt(d['lifetimePagesTotal']));
         }
       }, failures);
 
@@ -315,7 +344,7 @@ class SyncService {
         final t = await _doc('tasbeeh').get();
         if (t.exists) {
           for (final e in ((t.data()!['phrases'] as Map<String, dynamic>?) ?? {}).entries) {
-            await prefs.setInt('tasbeeh_total_' + e.key, _asInt(e.value));
+            await _setIntMax(prefs, 'tasbeeh_total_' + e.key, _asInt(e.value));
           }
         }
       }, failures);
@@ -324,10 +353,10 @@ class SyncService {
         final f = await _doc('favorites').get();
         if (f.exists) {
           final d = f.data()!;
-          if (d['ayahs'] != null) await prefs.setStringList('favorite_ayahs_all', List<String>.from(d['ayahs']));
-          if (d['azkar'] != null) await prefs.setStringList('favorite_azkar_all', List<String>.from(d['azkar']));
-          if (d['hadiths'] != null) await prefs.setStringList('favorite_hadiths_all', List<String>.from(d['hadiths']));
-          if (d['radioStations'] != null) await prefs.setStringList('radio_favorites', List<String>.from(d['radioStations']));
+          if (d['ayahs'] != null) await _setListUnion(prefs, 'favorite_ayahs_all', List<String>.from(d['ayahs']));
+          if (d['azkar'] != null) await _setListUnion(prefs, 'favorite_azkar_all', List<String>.from(d['azkar']));
+          if (d['hadiths'] != null) await _setListUnion(prefs, 'favorite_hadiths_all', List<String>.from(d['hadiths']));
+          if (d['radioStations'] != null) await _setListUnion(prefs, 'radio_favorites', List<String>.from(d['radioStations']));
         }
       }, failures);
 
@@ -336,7 +365,7 @@ class SyncService {
         if (doc.exists) {
           final byDate = (doc.data()!['byDate'] as Map<String, dynamic>?) ?? {};
           for (final e in byDate.entries) {
-            await prefs.setStringList('prayed_' + e.key, List<String>.from(e.value ?? []));
+            await _setListUnion(prefs, 'prayed_' + e.key, List<String>.from(e.value ?? []));
           }
         }
       }, failures);
@@ -345,37 +374,45 @@ class SyncService {
         final doc = await _doc('progress_stats').get();
         if (doc.exists) {
           final d = doc.data()!;
-          if (d['azkarLifetimeTotal'] != null) await prefs.setInt('azkar_lifetime_total', _asInt(d['azkarLifetimeTotal']));
-          if (d['tasbeehLifetimeTotal'] != null) await prefs.setInt('tasbeeh_lifetime_total', _asInt(d['tasbeehLifetimeTotal']));
-          if (d['prayersLifetimeTotal'] != null) await prefs.setInt('prayers_lifetime_total', _asInt(d['prayersLifetimeTotal']));
-          if (d['khatmasCompletedCount'] != null) await prefs.setInt('khatmas_completed_count', _asInt(d['khatmasCompletedCount']));
-          if (d['khatmasCompletedIds'] != null) await prefs.setStringList('khatmas_completed_ids', List<String>.from(d['khatmasCompletedIds']));
-          if (d['completedSurahsAll'] != null) await prefs.setStringList('completed_surahs_all', List<String>.from(d['completedSurahsAll']));
+          if (d['azkarLifetimeTotal'] != null) await _setIntMax(prefs, 'azkar_lifetime_total', _asInt(d['azkarLifetimeTotal']));
+          if (d['tasbeehLifetimeTotal'] != null) await _setIntMax(prefs, 'tasbeeh_lifetime_total', _asInt(d['tasbeehLifetimeTotal']));
+          if (d['prayersLifetimeTotal'] != null) await _setIntMax(prefs, 'prayers_lifetime_total', _asInt(d['prayersLifetimeTotal']));
+          if (d['khatmasCompletedCount'] != null) await _setIntMax(prefs, 'khatmas_completed_count', _asInt(d['khatmasCompletedCount']));
+          if (d['khatmasCompletedIds'] != null) await _setListUnion(prefs, 'khatmas_completed_ids', List<String>.from(d['khatmasCompletedIds']));
+          if (d['completedSurahsAll'] != null) await _setListUnion(prefs, 'completed_surahs_all', List<String>.from(d['completedSurahsAll']));
           if (d['wirdProgressPages'] != null) await prefs.setInt('wird_progress_pages', _asInt(d['wirdProgressPages']));
           if (d['wirdProgressDay'] is String) await prefs.setString('wird_progress_day', d['wirdProgressDay']);
-          if (d['wirdStreak'] != null) await prefs.setInt('wird_streak', _asInt(d['wirdStreak']));
-          if (d['wirdStreakLastDay'] is String) await prefs.setString('wird_streak_last_day', d['wirdStreakLastDay']);
-          if (d['wirdLongestStreak'] != null) await prefs.setInt('wird_longest_streak', _asInt(d['wirdLongestStreak']));
-          if (d['congregationLifetimeTotal'] != null) await prefs.setInt('congregation_lifetime_total', _asInt(d['congregationLifetimeTotal']));
+          if (d['wirdStreak'] != null) {
+            final cloudLast = d['wirdStreakLastDay'] is String ? d['wirdStreakLastDay'] as String : '';
+            final localLast = prefs.getString('wird_streak_last_day') ?? '';
+            final cloudStreak = _asInt(d['wirdStreak']);
+            final localStreak = prefs.getInt('wird_streak') ?? 0;
+            if (cloudLast.compareTo(localLast) > 0 || (cloudLast == localLast && cloudStreak > localStreak)) {
+              await prefs.setInt('wird_streak', cloudStreak);
+              if (cloudLast.isNotEmpty) await prefs.setString('wird_streak_last_day', cloudLast);
+            }
+          }
+          if (d['wirdLongestStreak'] != null) await _setIntMax(prefs, 'wird_longest_streak', _asInt(d['wirdLongestStreak']));
+          if (d['congregationLifetimeTotal'] != null) await _setIntMax(prefs, 'congregation_lifetime_total', _asInt(d['congregationLifetimeTotal']));
           final wirdPagesByDate = (d['wirdPagesByDate'] as Map<String, dynamic>?) ?? {};
           for (final e in wirdPagesByDate.entries) {
-            await prefs.setInt('wird_pages_' + e.key, _asInt(e.value));
+            await _setIntMax(prefs, 'wird_pages_' + e.key, _asInt(e.value));
           }
           final azkarCompletedByDate = (d['azkarCompletedByDate'] as Map<String, dynamic>?) ?? {};
           for (final e in azkarCompletedByDate.entries) {
-            await prefs.setStringList('azkar_completed_' + e.key, List<String>.from(e.value ?? []));
+            await _setListUnion(prefs, 'azkar_completed_' + e.key, List<String>.from(e.value ?? []));
           }
           final tasbeehDailyByDate = (d['tasbeehDailyByDate'] as Map<String, dynamic>?) ?? {};
           for (final e in tasbeehDailyByDate.entries) {
-            await prefs.setInt('tasbeeh_daily_total_' + e.key, _asInt(e.value));
+            await _setIntMax(prefs, 'tasbeeh_daily_total_' + e.key, _asInt(e.value));
           }
           final fastingByDate = (d['fastingByDate'] as Map<String, dynamic>?) ?? {};
           for (final e in fastingByDate.entries) {
-            if (e.value is bool) await prefs.setBool('fasting_' + e.key, e.value);
+            if (e.value == true) await prefs.setBool('fasting_' + e.key, true);
           }
           final duaReadByDate = (d['duaReadByDate'] as Map<String, dynamic>?) ?? {};
           for (final e in duaReadByDate.entries) {
-            if (e.value is bool) await prefs.setBool('dua_read_' + e.key, e.value);
+            if (e.value == true) await prefs.setBool('dua_read_' + e.key, true);
           }
         }
       }, failures);
@@ -390,7 +427,7 @@ class SyncService {
       for (final e in {'muhasabah': 'muhasabah_entries_v1', 'recitation_mistakes': 'recitation_mistakes_v1'}.entries) {
         await _runIsolated(e.key, () async {
           final doc = await _doc(e.key).get();
-          if (doc.exists && doc.data()!['data'] != null) await prefs.setStringList(e.value, List<String>.from(doc.data()!['data']));
+          if (doc.exists && doc.data()!['data'] != null) await _setListUnion(prefs, e.value, List<String>.from(doc.data()!['data']));
         }, failures);
       }
 
@@ -569,9 +606,13 @@ class SyncService {
   /// Deletes all user data from Firestore (called before account deletion).
   Future<void> deleteAllCloudData() async {
     if (_uid == null) return;
-    final collections = [
-      'settings', 'quran_progress', 'tasbeeh', 'progress_stats',
-      'favorites', 'bookmarks', 'khatma', 'prayer_log', 'profile', 'tasbeeh_custom', 'my_duas',
+    // Every document SyncService ever writes under users/{uid}/data/. This list
+    // MUST cover all of them: after the account is deleted the security rules
+    // (auth.uid == userId) make it impossible to remove anything later.
+    // (v1.55: custom_azkar, sadaqah, qada, muhasabah and recitation_mistakes
+    // were missing, so they survived account deletion.)
+    final collections = <String>[
+      ...allSyncedDocumentNames,
     ];
     for (final col in collections) {
       try {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,14 +61,28 @@ class QuranRepository {
     }
   }
 
+  /// Parsed surahs kept in memory. Before v1.55 every caller (15 screens/widgets)
+  /// re-read the 1.4 MB JSON and parsed it on the UI thread on each call.
+  static List<SurahModel>? _memoryCache;
+
   static Future<List<SurahModel>> load({bool forceRefresh = false}) async {
+    if (!forceRefresh && _memoryCache != null) return _memoryCache!;
+    final surahs = await _loadUncached(forceRefresh: forceRefresh);
+    _memoryCache = surahs;
+    return surahs;
+  }
+
+  /// Parses off the UI thread (about 6,000 ayahs).
+  static Future<List<SurahModel>> _parseAsync(String raw) => compute(_parse, raw);
+
+  static Future<List<SurahModel>> _loadUncached({bool forceRefresh = false}) async {
     if (!forceRefresh) {
       final cached = await LocalCacheService.getString(_cacheKey);
       if (cached != null) {
         // Return cached data immediately, refresh silently in background.
         // ignore: unawaited_futures
         _refreshInBackground();
-        return _parse(cached);
+        return _parseAsync(cached);
       }
       // No cache yet (first launch): serve the bundled copy immediately and
       // fill the cache from the network in the background.
@@ -75,24 +90,24 @@ class QuranRepository {
       if (bundled != null) {
         // ignore: unawaited_futures
         _refreshInBackground();
-        return _parse(bundled);
+        return _parseAsync(bundled);
       }
     }
 
     try {
       final raw = await _fetchRaw();
       await LocalCacheService.setString(_cacheKey, raw);
-      return _parse(raw);
+      return _parseAsync(raw);
     } catch (e, st) {
       final cached = await LocalCacheService.getString(_cacheKey);
       if (cached != null) {
         AppLogger.error('Quran fetch failed, falling back to cache', error: e, stackTrace: st);
-        return _parse(cached);
+        return _parseAsync(cached);
       }
       final bundled = await _loadBundled();
       if (bundled != null) {
         AppLogger.error('Quran fetch failed, falling back to bundled copy', error: e, stackTrace: st);
-        return _parse(bundled);
+        return _parseAsync(bundled);
       }
       AppLogger.error('Quran fetch failed with no cache available', error: e, stackTrace: st);
       rethrow;

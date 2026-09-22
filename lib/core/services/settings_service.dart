@@ -1,9 +1,37 @@
 import 'dart:convert';
 import '../theme/app_theme.dart';
+import 'hijri_date.dart';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Default prayer calculation method (AlAdhan method id) for a device region.
+/// Previously every user got method 5 (Egyptian General Authority) whatever
+/// their location; the Fajr/Isha angles differ enough elsewhere to shift the
+/// times by 10-20 minutes. Only ids present in
+/// AppSources.prayerCalculationMethods are returned. The user can always change it.
+int defaultCalcMethodForRegion(Locale locale) {
+  const byCountry = <String, int>{
+    'EG': 5, 'SD': 5, 'LY': 5,
+    'SA': 4, 'YE': 4, 'BH': 4, 'OM': 4,
+    'AE': 16, 'QA': 10, 'KW': 9,
+    'TR': 13,
+    'US': 2, 'CA': 2, 'MX': 2,
+    'PK': 1, 'IN': 1, 'BD': 1, 'AF': 1,
+    'ID': 20, 'MY': 17,
+    'MA': 21,
+    'FR': 12,
+    'GB': 3, 'IE': 3, 'DE': 3, 'NL': 3, 'BE': 3, 'AT': 3, 'CH': 3, 'ES': 3, 'IT': 3,
+    'SE': 3, 'NO': 3, 'DK': 3, 'FI': 3, 'PL': 3, 'AU': 3, 'NZ': 3,
+  };
+  final country = (locale.countryCode ?? '').toUpperCase();
+  final byRegion = byCountry[country];
+  if (byRegion != null) return byRegion;
+  // Unknown region: Arabic UI keeps the Egyptian default, everyone else gets
+  // the Muslim World League method.
+  return locale.languageCode == 'ar' ? 5 : 3;
+}
 
 /// Top-level aliases so the settings screen and main.dart can import
 /// a single canonical list without accessing the class directly.
@@ -86,6 +114,7 @@ class AppSettings extends ChangeNotifier {
   final Map<String, int> prayerOffsets = {'Fajr': 0, 'Dhuhr': 0, 'Asr': 0, 'Maghrib': 0, 'Isha': 0};
   final Set<String> customAzkarReminders = {};
   int _prayerCalcMethod = 5;
+  int _hijriDayOffset = 0;
   bool _ongoingPrayerNotificationEnabled = false;
   // 'banner' | 'beep' | 'adhan'
   String _prayerReminderMode = 'adhan';
@@ -131,6 +160,7 @@ class AppSettings extends ChangeNotifier {
   bool get widgetLocked => _widgetLocked;
   bool get autoDarkModeAtMaghrib => _autoDarkModeAtMaghrib;
   int get prayerCalcMethod => _prayerCalcMethod;
+  int get hijriDayOffset => _hijriDayOffset;
   bool get ongoingPrayerNotificationEnabled => _ongoingPrayerNotificationEnabled;
   String get prayerReminderMode => _prayerReminderMode;
 
@@ -284,7 +314,15 @@ class AppSettings extends ChangeNotifier {
     customAzkarReminders
       ..clear()
       ..addAll(prefs.getStringList('settings_custom_azkar_reminders') ?? []);
-    _prayerCalcMethod = prefs.getInt('settings_prayer_calc_method') ?? 5;
+    _hijriDayOffset = prefs.getInt('settings_hijri_day_offset') ?? 0;
+    HijriDate.dayOffset = _hijriDayOffset;
+    final storedCalcMethod = prefs.getInt('settings_prayer_calc_method');
+    if (storedCalcMethod != null) {
+      _prayerCalcMethod = storedCalcMethod;
+    } else {
+      _prayerCalcMethod = defaultCalcMethodForRegion(PlatformDispatcher.instance.locale);
+      await prefs.setInt('settings_prayer_calc_method', _prayerCalcMethod);
+    }
     _ongoingPrayerNotificationEnabled = prefs.getBool('settings_ongoing_prayer_notification') ?? false;
     final storedOverride = prefs.getString('settings_prayer_sound_override');
     if (storedOverride != null) {
@@ -466,6 +504,15 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('settings_prayer_offsets', jsonEncode(prayerOffsets));
+  }
+
+  Future<void> setHijriDayOffset(int days) async {
+    final v = days < -2 ? -2 : (days > 2 ? 2 : days);
+    _hijriDayOffset = v;
+    HijriDate.dayOffset = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('settings_hijri_day_offset', v);
   }
 
   Future<void> setPrayerCalcMethod(int method) async {

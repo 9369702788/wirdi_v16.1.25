@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
 import '../data/app_sources.dart';
 import '../models/prayer_models.dart';
@@ -34,6 +36,38 @@ class PrayerService {
   static const _cacheManualCityKey = 'cache_prayer_manual_city_v2';
   static const _cacheLatKey = 'cache_prayer_lat_v1';
   static const _cacheLonKey = 'cache_prayer_lon_v1';
+  static const _cacheTzKey = 'cache_prayer_tz_v1';
+
+  // ---- Time zone handling (v1.55) ------------------------------------------
+  // AlAdhan returns clock times ("05:03") in the time zone of the REQUESTED
+  // coordinates, not of this device. They used to be stamped onto the device's
+  // own date/zone, which is wrong whenever the two zones differ (a manually
+  // chosen city in another zone, travel, VPN...). The API's `meta.timezone`
+  // is now used to turn each clock time into the correct absolute instant.
+  static bool _tzReady = false;
+
+  static tz.Location? _locationOrNull(String? name) {
+    if (name == null || name.isEmpty) return null;
+    try {
+      if (!_tzReady) {
+        tz_data.initializeTimeZones();
+        _tzReady = true;
+      }
+      return tz.getLocation(name);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String? _tzNameFrom(dynamic decoded) {
+    try {
+      final meta = decoded['data']['meta'];
+      final name = meta is Map ? meta['timezone'] : null;
+      return name is String && name.isNotEmpty ? name : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   static Future<void> clearCache() async {
     final prefs = await SharedPreferences.getInstance();
@@ -107,6 +141,7 @@ class PrayerService {
       final timings = decoded['data']['timings'] as Map<String, dynamic>;
 
       final locationLabel = await _reverseGeocode(position.latitude, position.longitude);
+      final tzName = _tzNameFrom(decoded);
 
       await _saveCache(
         timings: timings,
@@ -115,9 +150,10 @@ class PrayerService {
         manualCity: null,
         latitude: position.latitude,
         longitude: position.longitude,
+        tzName: tzName,
       );
 
-      return _buildResult(timings, isFromCache: false, cachedAt: DateTime.now(), locationLabel: locationLabel);
+      return _buildResult(timings, isFromCache: false, cachedAt: DateTime.now(), locationLabel: locationLabel, tzName: tzName);
     } catch (e, st) {
       AppLogger.error('Prayer times fetch failed, falling back to cache', error: e, stackTrace: st);
       final cached = await _tryLoadCache();
@@ -168,6 +204,8 @@ class PrayerService {
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       final timings = decoded['data']['timings'] as Map<String, dynamic>;
 
+      final tzName = _tzNameFrom(decoded);
+
       await _saveCache(
         timings: timings,
         locationLabel: trimmed,
@@ -175,9 +213,10 @@ class PrayerService {
         manualCity: trimmed,
         latitude: coords.$1,
         longitude: coords.$2,
+        tzName: tzName,
       );
 
-      return _buildResult(timings, isFromCache: false, cachedAt: DateTime.now(), locationLabel: trimmed);
+      return _buildResult(timings, isFromCache: false, cachedAt: DateTime.now(), locationLabel: trimmed, tzName: tzName);
     } catch (e, st) {
       AppLogger.error('Manual city prayer times fetch failed', error: e, stackTrace: st);
       rethrow;
@@ -194,7 +233,7 @@ class PrayerService {
       );
       final response = await http.get(
         url,
-        headers: {'User-Agent': 'WirdiApp/1.0 (Islamic daily companion app)'},
+        headers: {'User-Agent': AppSources.httpUserAgent},
       ).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return null;
 
@@ -237,7 +276,7 @@ class PrayerService {
       );
       final response = await http.get(
         url,
-        headers: {'User-Agent': 'WirdiApp/1.0 (Islamic daily companion app)'},
+        headers: {'User-Agent': AppSources.httpUserAgent},
       ).timeout(const Duration(seconds: 8));
 
       if (response.statusCode != 200) return null;
@@ -267,8 +306,14 @@ class PrayerService {
     required String? manualCity,
     double? latitude,
     double? longitude,
+    String? tzName,
   }) async {
     final prefs = await SharedPreferences.getInstance();
+    if (tzName != null) {
+      await prefs.setString(_cacheTzKey, tzName);
+    } else {
+      await prefs.remove(_cacheTzKey);
+    }
     await prefs.setString(_cacheTimingsKey, jsonEncode(timings));
     await prefs.setString(_cacheDateKey, DateTime.now().toIso8601String());
     await prefs.setString(_cacheModeKey, mode);
@@ -300,7 +345,7 @@ class PrayerService {
     // reasonable offline approximation (times shift by only ~1-2 min/day)
     // and is always labeled isFromCache=true in the UI, never presented
     // as a live reading.
-    return _buildResult(timings, isFromCache: true, cachedAt: cachedAt, locationLabel: locationLabel);
+    return _buildResult(timings, isFromCache: true, cachedAt: cachedAt, locationLabel: locationLabel, tzName: prefs.getString(_cacheTzKey));
   }
 
   static PrayerTimesResult _buildResult(
@@ -308,18 +353,14 @@ class PrayerService {
     required bool isFromCache,
     DateTime? cachedAt,
     String? locationLabel,
+    String? tzName,
   }) {
     final now = DateTime.now();
-
-    final prayers = <PrayerItem>[];
-    for (var i = 0; i < _kOrderedApiKeys.length; i++) {
-      final timeText = _cleanTime(timings[_kOrderedApiKeys[i]]);
-      prayers.add(PrayerItem(
-        name: _kOrderedApiKeys[i],
-        timeText: timeText,
-        dateTime: _timeToday(timeText, now),
-      ));
-    }
+    // "Today" is the date in the prayer location's zone (equals the device date
+    // when both share a zone).
+    final loc = _locationOrNull(tzName);
+    final today = loc != null ? tz.TZDateTime.now(loc) : now;
+    final prayers = _buildPrayersForDate(timings, today.year, today.month, today.day, tzName: tzName);
 
     final next = _nextPrayer(prayers, now);
 
@@ -344,60 +385,93 @@ class PrayerService {
     );
   }
 
-  /// Fetches tomorrow's prayer times (for scheduling tomorrow's
-  /// notifications a day ahead) using the same location source as the
-  /// last successful fetch — cached GPS coordinates, or the saved manual
-  /// city. Deliberately does not request location permission or prompt
-  /// the user; if no location is available yet, returns null and the
-  /// caller simply schedules one fewer day's worth of reminders (today's
-  /// notifications are unaffected).
-  static Future<List<PrayerItem>?> fetchTomorrowPrayers() async {
-    final tomorrow = DateTime.now().add(const Duration(days: 1));
-    final mode = await savedMode();
-
+  /// Fetches the next [days] days of prayer times (starting tomorrow) for
+  /// notification scheduling, using ONE calendar request per month touched.
+  /// Uses the coordinates saved by the last successful fetch (GPS or manual
+  /// city); never asks for location permission. Returns an empty map when no
+  /// location is known yet or the network is unavailable  the caller then just
+  /// schedules what it has (today's notifications are unaffected).
+  ///
+  /// Key = date at midnight (device-local calendar date of the prayer instant's
+  /// location day), value = that day's prayers with the user's offsets applied.
+  static Future<Map<DateTime, List<PrayerItem>>> fetchUpcomingPrayers({int days = 14}) async {
+    final result = <DateTime, List<PrayerItem>>{};
     try {
-      if (mode == 'manual') {
-        final city = await savedManualCity();
-        if (city == null || city.isEmpty) return null;
-        final url = AppSources.prayerTimesByAddressUrl(city, date: tomorrow, method: appSettings.prayerCalcMethod, school: await _schoolFromMathhab());
-        final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
-        if (response.statusCode != 200) return null;
-        final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-        final timings = decoded['data']['timings'] as Map<String, dynamic>;
-        return _buildPrayersForDate(timings, tomorrow);
-      }
-
       final prefs = await SharedPreferences.getInstance();
       final lat = prefs.getDouble(_cacheLatKey);
       final lon = prefs.getDouble(_cacheLonKey);
-      if (lat == null || lon == null) return null;
+      if (lat == null || lon == null) return result;
+      final school = await _schoolFromMathhab();
+      final method = appSettings.prayerCalcMethod;
 
-      final url = AppSources.prayerTimesUrl(latitude: lat, longitude: lon, date: tomorrow, method: appSettings.prayerCalcMethod, school: await _schoolFromMathhab());
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) return null;
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-      final timings = decoded['data']['timings'] as Map<String, dynamic>;
-      return _buildPrayersForDate(timings, tomorrow);
+      final start = DateTime.now().add(const Duration(days: 1));
+      final wanted = <DateTime>[
+        for (var i = 0; i < days; i++) DateTime(start.year, start.month, start.day + i),
+      ];
+      final months = <(int, int)>{for (final d in wanted) (d.year, d.month)};
+
+      for (final (year, month) in months) {
+        final url = AppSources.prayerCalendarUrl(latitude: lat, longitude: lon, month: month, year: year, method: method, school: school);
+        final response = await http.get(Uri.parse(url), headers: {'User-Agent': AppSources.httpUserAgent}).timeout(const Duration(seconds: 20));
+        if (response.statusCode != 200) continue;
+        final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+        final data = decoded['data'];
+        if (data is! List) continue;
+        for (final entry in data) {
+          if (entry is! Map) continue;
+          final gregorian = (entry['date'] as Map?)?['gregorian'] as Map?;
+          final day = int.tryParse('${gregorian?['day']}');
+          final timings = entry['timings'];
+          if (day == null || timings is! Map) continue;
+          final wantedDay = wanted.where((d) => d.year == year && d.month == month && d.day == day);
+          if (wantedDay.isEmpty) continue;
+          final meta = entry['meta'];
+          final tzName = meta is Map && meta['timezone'] is String ? meta['timezone'] as String : null;
+          result[wantedDay.first] = _buildPrayersForDate(Map<String, dynamic>.from(timings), year, month, day, tzName: tzName);
+        }
+      }
     } catch (e, st) {
-      // Non-critical — tomorrow's notifications simply won't be
-      // pre-scheduled until the next successful fetch (e.g. tomorrow
-      // morning), today's are unaffected.
-      AppLogger.error('Failed to fetch tomorrow\'s prayer times for scheduling', error: e, stackTrace: st);
-      return null;
+      AppLogger.error('Failed to fetch upcoming prayer times for scheduling', error: e, stackTrace: st);
     }
+    return result;
   }
 
-  static List<PrayerItem> _buildPrayersForDate(Map<String, dynamic> timings, DateTime date) {
+  /// Tomorrow's prayers only (kept for callers that need just the next day).
+  static Future<List<PrayerItem>?> fetchTomorrowPrayers() async {
+    final upcoming = await fetchUpcomingPrayers(days: 1);
+    return upcoming.isEmpty ? null : upcoming.values.first;
+  }
+
+  /// Builds the day's prayers as absolute instants (see the time zone note
+  /// above) with the user's per-prayer offsets applied ONCE, here, so the
+  /// list, the countdown, the notifications and the widget can never disagree.
+  static List<PrayerItem> _buildPrayersForDate(
+    Map<String, dynamic> timings,
+    int year,
+    int month,
+    int day, {
+    String? tzName,
+  }) {
+    final loc = _locationOrNull(tzName);
     final prayers = <PrayerItem>[];
-    for (var i = 0; i < _kOrderedApiKeys.length; i++) {
-      final timeText = _cleanTime(timings[_kOrderedApiKeys[i]]);
-      final parts = timeText.split(':');
+    for (final key in _kOrderedApiKeys) {
+      final clean = _cleanTime(timings[key]);
+      final parts = clean.split(':');
       final hour = int.tryParse(parts[0]) ?? 0;
       final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+      final offset = appSettings.prayerOffsets[key] ?? 0;
+
+      final base = loc != null
+          ? DateTime.fromMillisecondsSinceEpoch(tz.TZDateTime(loc, year, month, day, hour, minute).millisecondsSinceEpoch)
+          : DateTime(year, month, day, hour, minute);
+
+      final shown = (((hour * 60 + minute + offset) % 1440) + 1440) % 1440;
+      final timeText = '${(shown ~/ 60).toString().padLeft(2, '0')}:${(shown % 60).toString().padLeft(2, '0')}';
+
       prayers.add(PrayerItem(
-        name: _kOrderedApiKeys[i],
+        name: key,
         timeText: timeText,
-        dateTime: DateTime(date.year, date.month, date.day, hour, minute),
+        dateTime: base.add(Duration(minutes: offset)),
       ));
     }
     return prayers;
@@ -407,13 +481,6 @@ class PrayerService {
     final text = value.toString();
     if (text.contains(' ')) return text.split(' ').first;
     return text;
-  }
-
-  static DateTime _timeToday(String value, DateTime now) {
-    final parts = value.split(':');
-    final hour = int.tryParse(parts[0]) ?? 0;
-    final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
-    return DateTime(now.year, now.month, now.day, hour, minute);
   }
 
   /// Invalidate cached prayer times.
