@@ -48,7 +48,7 @@ class _SplashScreenState extends State<SplashScreen>
         children: [
           Positioned.fill(
             child: Image.asset(
-              'assets/images/generated/mosque_sunrise.png',
+              'assets/images/generated/mosque_sunrise.webp',
               fit: BoxFit.cover,
               alignment: Alignment.topCenter,
             ),
@@ -129,7 +129,7 @@ class _MosaicBgState extends State<_MosaicBg> {
     if (_cachedImage != null) {
       _image = _cachedImage;
     } else {
-      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+      final stream = const AssetImage('assets/images/wirdi_mosaic.webp')
           .resolve(const ImageConfiguration());
       _listener = ImageStreamListener((info, _) {
         _cachedImage = info.image;

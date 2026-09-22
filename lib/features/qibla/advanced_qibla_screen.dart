@@ -1,3 +1,4 @@
+import '../../core/services/magnetic_declination_service.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -22,6 +23,7 @@ class _AdvancedQiblaScreenState extends State<AdvancedQiblaScreen> {
   double? _distanceKm;
   StreamSubscription<compass_v2.CompassEvent>? _compassSub;
   double? _heading;
+  double _declination = 0.0; // magnetic -> true north (v1.55)
   double? _accuracy;
   bool _hasCompassSensor = true;
 
@@ -57,6 +59,7 @@ class _AdvancedQiblaScreenState extends State<AdvancedQiblaScreen> {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       ).timeout(const Duration(seconds: 15));
+      _declination = await MagneticDeclinationService.at(latitude: position.latitude, longitude: position.longitude);
       final bearing = QiblaService.bearingTo(latitude: position.latitude, longitude: position.longitude);
       final distance = QiblaService.distanceKmTo(latitude: position.latitude, longitude: position.longitude);
       if (!mounted) return;
@@ -80,7 +83,7 @@ class _AdvancedQiblaScreenState extends State<AdvancedQiblaScreen> {
     _compassSub = events.listen((event) {
       if (event.heading != null && mounted) {
         setState(() {
-          _heading = event.heading;
+          _heading = MagneticDeclinationService.toTrue(event.heading!, _declination);
           _accuracy = event.accuracy;
         });
       }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/services/hajj_umrah_guide.dart';
 import '../../core/theme/app_theme.dart';
-import '../../shared/widgets/mosaic_background.dart';
 
 /// Shows the Hajj & Umrah guide split into two tabs -- "Umrah rituals"
 /// (just the steps an Umrah actually requires: Ihram, Tawaf, Sa'i,
@@ -60,8 +59,6 @@ class _HajjUmrahGuideScreenState extends State<HajjUmrahGuideScreen> with Single
 
     return Scaffold(
       appBar: AppBar(
-        foregroundColor: Colors.white,
-        flexibleSpace: const MosaicBackground(col: 0, row: 1, opacity: 0.45),
         title: Text(isAr ? 'دليل الحج والعمرة' : 'Hajj & Umrah Guide'),
         centerTitle: true,
         bottom: TabBar(

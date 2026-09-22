@@ -1,3 +1,4 @@
+import '../../core/services/magnetic_declination_service.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -24,6 +25,7 @@ class _QiblaCameraScreenState extends State<QiblaCameraScreen> {
   CameraController? _controller;
   double? _qiblaBearing;
   double? _heading;
+  double _declination = 0.0; // magnetic -> true north (v1.55)
   StreamSubscription<CompassEvent>? _compassSub;
   String? _errorDetail;
 
@@ -56,6 +58,7 @@ class _QiblaCameraScreenState extends State<QiblaCameraScreen> {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       ).timeout(const Duration(seconds: 15));
+      _declination = await MagneticDeclinationService.at(latitude: position.latitude, longitude: position.longitude);
       _qiblaBearing = QiblaService.bearingTo(latitude: position.latitude, longitude: position.longitude);
     } catch (_) {
       if (mounted) setState(() => _status = _CameraQiblaStatus.locationError);
@@ -86,7 +89,7 @@ class _QiblaCameraScreenState extends State<QiblaCameraScreen> {
     if (events == null) return;
     _compassSub = events.listen((event) {
       if (event.heading != null && mounted) {
-        setState(() => _heading = event.heading);
+        setState(() => _heading = MagneticDeclinationService.toTrue(event.heading!, _declination));
       }
     });
   }

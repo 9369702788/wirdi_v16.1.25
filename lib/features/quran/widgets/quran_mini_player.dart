@@ -43,7 +43,8 @@ class QuranMiniPlayer extends StatelessWidget {
                 ),
               ],
             ),
-            child: Row(children: [
+            child: Stack(fit: StackFit.expand, children: [
+              Row(children: [
               const SizedBox(width: 14),
               const Icon(Icons.menu_book_rounded, color: Colors.white70, size: 24),
               const SizedBox(width: 12),
@@ -83,6 +84,22 @@ class QuranMiniPlayer extends StatelessWidget {
                 onPressed: () => quranAudio.stop(),
               ),
               const SizedBox(width: 4),
+              ]),
+              // Surah-level progress (v1.55): how far through the whole surah, not the ayah.
+              Positioned(
+                left: 14,
+                right: 14,
+                bottom: 5,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: quranAudio.surahProgress,
+                    minHeight: 3,
+                    backgroundColor: Colors.white24,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.goldAccent),
+                  ),
+                ),
+              ),
             ]),
           ),
         );

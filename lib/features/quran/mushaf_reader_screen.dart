@@ -15,7 +15,6 @@ import '../../core/services/sajda_tracker_service.dart';
 import '../../core/services/word_by_word_repository.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/services/tajweed_helper.dart';
-import '../../core/services/ambiance_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/data/bismillah.dart';
@@ -70,7 +69,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen> {
   bool _loadingWbw = false;
   Timer? _sleepTimer;
   int? _sleepMinutesRemaining;
-  String _selectedAmbiance = 'None';
   Map<String, dynamic>? _lastReadPosition;
   Set<int> _pinnedSurahs = {};
 
@@ -78,7 +76,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen> {
   void initState() {
     super.initState();
     _load();
-    _loadAmbiance();
     _loadPinnedSurahs();
     quranAudio.addListener(_onAudioChanged);
   }
@@ -99,11 +96,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen> {
     });
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('pinned_surahs', _pinnedSurahs.map((e) => e.toString()).toList());
-  }
-
-  Future<void> _loadAmbiance() async {
-    final a = await AmbianceService.getAmbiance();
-    if (mounted) setState(() => _selectedAmbiance = a);
   }
 
   @override
@@ -328,14 +320,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen> {
                 Navigator.pop(sheetContext);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.music_note_outlined),
-              title: Text(_t(context, 'الصوت الخلفي', 'Background ambiance')),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickAmbianceDialog();
-              },
-            ),
             if (_selectedSurah != null)
               ListTile(
                 leading: Icon(Icons.self_improvement, color: _focusMode ? AppColors.primaryEmerald : null),
@@ -428,30 +412,6 @@ class _MushafReaderScreenState extends State<MushafReaderScreen> {
                 if (appSettings.quranFontFamily == key) const Icon(Icons.check, size: 18) else const SizedBox(width: 18),
                 const SizedBox(width: 8),
                 Text(key == 'default' ? _t(context, 'افتراضي', 'Default') : key.replaceFirst('Quran', '')),
-              ]),
-            ),
-        ],
-      ),
-    );
-  }
-
-  void _pickAmbianceDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: Text(_t(context, 'الصوت الخلفي', 'Background ambiance')),
-        children: [
-          for (final option in AmbianceService.ambianceOptions)
-            SimpleDialogOption(
-              onPressed: () async {
-                await AmbianceService.setAmbiance(option);
-                if (mounted) setState(() => _selectedAmbiance = option);
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-              },
-              child: Row(children: [
-                if (_selectedAmbiance == option) const Icon(Icons.check, size: 18) else const SizedBox(width: 18),
-                const SizedBox(width: 8),
-                Text(option),
               ]),
             ),
         ],

@@ -32,7 +32,7 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
   bool _loading = true;
   PrayerAvailability? _availabilityError;
   PrayerTimesResult? _result;
-  String _countdown = '--:--:--';
+  final ValueNotifier<String> _countdown = ValueNotifier<String>('--:--:--'); // v1.55: only the countdown Text rebuilds each second
   Timer? _timer;
   Set<String> _prayedToday = {};
   String? _remindedForPrayer; // avoids re-firing the reminder every second
@@ -50,6 +50,7 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _countdown.dispose();
     _adhanPlayer.dispose();
     super.dispose();
   }
@@ -226,7 +227,7 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
     final minutes = (diff.inMinutes % 60).toString().padLeft(2, '0');
     final seconds = (diff.inSeconds % 60).toString().padLeft(2, '0');
 
-    if (mounted) setState(() => _countdown = '$hours:$minutes:$seconds');
+    if (mounted) _countdown.value = '$hours:$minutes:$seconds';
 
     _maybeFireReminder(diff, result.next.name);
   }
@@ -295,14 +296,9 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
         PrayerAvailability.ok => '',
       };
 
-  String _calibratedTimeText(PrayerItem prayer) {
-    final offset = appSettings.prayerOffsets[prayer.name] ?? 0;
-    if (offset == 0) return prayer.timeText;
-    final adjusted = prayer.dateTime.add(Duration(minutes: offset));
-    final hour = adjusted.hour.toString().padLeft(2, '0');
-    final minute = adjusted.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
+  /// Offsets are applied once, inside PrayerService (v1.55), so the list,
+  /// countdown, notifications and widget agree; this only returns the text.
+  String _calibratedTimeText(PrayerItem prayer) => prayer.timeText;
 
   @override
   Widget build(BuildContext context) {
@@ -495,7 +491,10 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
                 Text(prayerDisplayName(l10n, result.next.name),
                     style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
-                Text(_countdown, style: TextStyle(color: AppColors.goldAccent, fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: 1.5)),
+                ValueListenableBuilder<String>(
+                  valueListenable: _countdown,
+                  builder: (context, value, _) => Text(value, style: TextStyle(color: AppColors.goldAccent, fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: 1.5)),
+                ),
                 const SizedBox(height: 6),
                 Text(l10n.prayerTimeRemaining, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 12),
@@ -655,7 +654,7 @@ class _MosaicBgState extends State<_MosaicBg> {
     if (_cachedImage != null) {
       _image = _cachedImage;
     } else {
-      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+      final stream = const AssetImage('assets/images/wirdi_mosaic.webp')
           .resolve(const ImageConfiguration());
       _listener = ImageStreamListener((info, _) {
         _cachedImage = info.image;

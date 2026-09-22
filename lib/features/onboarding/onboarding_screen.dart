@@ -35,6 +35,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int get _pageCount => _slides.length + 1;
   bool get _isGoalPage => _index == _slides.length;
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   Future<void> _finish() async {
     if (_finishing) return;
     _finishing = true;

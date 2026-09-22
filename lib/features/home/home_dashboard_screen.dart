@@ -50,7 +50,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   PrayerTimesResult? _prayer;
   bool _prayerFailed = false;
   Timer? _timer;
-  String _countdown = '--:--:--';
+  // v1.55: only this Text rebuilds every second (was: the whole 1,000-line screen,
+  // even while another tab was showing, since every tab stays alive in RootShell).
+  final ValueNotifier<String> _countdown = ValueNotifier<String>('--:--:--');
   bool? _autoDarkAppliedState;
 
   Map<String, dynamic>? _lastReading;
@@ -74,6 +76,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _countdown.dispose();
     super.dispose();
   }
 
@@ -242,7 +245,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     final h = diff.inHours.toString().padLeft(2, '0');
     final m = (diff.inMinutes % 60).toString().padLeft(2, '0');
     final s = (diff.inSeconds % 60).toString().padLeft(2, '0');
-    if (mounted) setState(() => _countdown = '$h:$m:$s');
+    if (mounted) _countdown.value = '$h:$m:$s';
   }
 
   void _applyAutoDarkModeIfEnabled(PrayerTimesResult prayer) {
@@ -476,7 +479,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   children: [
                     Positioned.fill(
                       child: Image.asset(
-                        'assets/images/generated/mosque_sunrise.png',
+                        'assets/images/generated/mosque_sunrise.webp',
                         fit: BoxFit.cover,
                         alignment: Alignment.topCenter,
                       ),
@@ -506,7 +509,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     if (_prayer != null) ...[
                       Text(prayerDisplayName(l10n, _prayer!.next.name), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 4),
-                      Text(l10n.homeInLabel(_countdown), style: TextStyle(color: AppColors.goldAccent, fontSize: 16)),
+                      ValueListenableBuilder<String>(
+                        valueListenable: _countdown,
+                        builder: (context, value, _) => Text(l10n.homeInLabel(value), style: TextStyle(color: AppColors.goldAccent, fontSize: 16)),
+                      ),
                       const SizedBox(height: 10),
                       Row(
                         children: [
@@ -965,7 +971,7 @@ class _MosaicBgState extends State<_MosaicBg> {
     if (_cachedImage != null) {
       _image = _cachedImage;
     } else {
-      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+      final stream = const AssetImage('assets/images/wirdi_mosaic.webp')
           .resolve(const ImageConfiguration());
       _listener = ImageStreamListener((info, _) {
         _cachedImage = info.image;

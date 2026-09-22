@@ -1,3 +1,4 @@
+import '../../core/services/magnetic_declination_service.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -26,6 +27,7 @@ class _QiblaScreenState extends State<QiblaScreen> {
   double? _distanceKm;
   StreamSubscription<CompassEvent>? _compassSub;
   double? _heading;
+  double _declination = 0.0; // magnetic -> true north (v1.55)
   bool _hasCompassSensor = true;
 
   @override
@@ -63,6 +65,7 @@ class _QiblaScreenState extends State<QiblaScreen> {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       ).timeout(const Duration(seconds: 15));
+      _declination = await MagneticDeclinationService.at(latitude: position.latitude, longitude: position.longitude);
 
       final bearing = QiblaService.bearingTo(latitude: position.latitude, longitude: position.longitude);
       final distance = QiblaService.distanceKmTo(latitude: position.latitude, longitude: position.longitude);
@@ -90,7 +93,7 @@ class _QiblaScreenState extends State<QiblaScreen> {
     }
     _compassSub = events.listen((event) {
       if (event.heading != null && mounted) {
-        setState(() => _heading = event.heading);
+        setState(() => _heading = MagneticDeclinationService.toTrue(event.heading!, _declination));
       }
     });
   }
@@ -357,7 +360,7 @@ class _MosaicBgState extends State<_MosaicBg> {
     if (_cachedImage != null) {
       _image = _cachedImage;
     } else {
-      final stream = const AssetImage('assets/images/wirdi_mosaic.png')
+      final stream = const AssetImage('assets/images/wirdi_mosaic.webp')
           .resolve(const ImageConfiguration());
       _listener = ImageStreamListener((info, _) {
         _cachedImage = info.image;

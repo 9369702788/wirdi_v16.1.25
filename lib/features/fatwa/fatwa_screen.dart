@@ -36,7 +36,7 @@ class _FatwaScreenState extends State<FatwaScreen> {
                 padding: const EdgeInsets.all(12),
                 color: AppColors.goldAccent.withValues(alpha: 0.1),
                 child: Text(
-                  isAr ? 'أحكام عامة متفق عليها في الغالب. لأي حالة خاصة بك، استشر عالمًا مؤهلًا.' : 'General, mostly-agreed rulings. For your specific situation, consult a qualified scholar.',
+                  isAr ? 'ملخصات تعليمية عامة وليست فتاوى، وقد تختلف المذاهب في بعض المسائل. لحالتك الخاصة اسأل عالمًا مؤهلًا.' : 'General educational summaries, not fatwas. The schools of thought differ on some points. For your specific situation, consult a qualified scholar.',
                   style: const TextStyle(fontSize: 12), textAlign: TextAlign.center,
                 ),
               ),

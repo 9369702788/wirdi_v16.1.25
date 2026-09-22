@@ -7,7 +7,6 @@ import '../../core/models/nearby_place.dart';
 import '../../core/services/nearby_places_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../l10n/generated/app_localizations.dart';
-import '../../shared/widgets/mosaic_background.dart';
 
 enum _MosqueError { locationDisabled, locationDenied, searchFailed }
 
@@ -119,8 +118,6 @@ class _MosqueFinderScreenState extends State<MosqueFinderScreen> with SingleTick
 
     return Scaffold(
       appBar: AppBar(
-        foregroundColor: Colors.white,
-        flexibleSpace: const MosaicBackground(col: 2, row: 0, opacity: 0.4),
         title: Text(l10n.toolMosqueTitle),
         centerTitle: true,
         bottom: TabBar(
