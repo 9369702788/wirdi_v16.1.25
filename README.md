@@ -1,7 +1,7 @@
 # Wirdi — Islamic Companion App
 
-**Version:** 1.54.0 (Build 20) | **Code Version:** v16.1.27 (Play-prep)  
-**Status:** Release-prep changes applied -- see RELEASE_PREP_v1.54.md for what changed and the manual Play Console steps still required
+**Version:** 1.55.0 (Build 21) | **Code Version:** v16.1.28 (Comprehensive-review-fixes)  
+**Status:** Release-prep + comprehensive-review fixes applied -- see RELEASE_PREP_v1.54.md and RELEASE_PREP_v1.55.md for what changed and the manual steps still required
 
 ## What is Wirdi?
 

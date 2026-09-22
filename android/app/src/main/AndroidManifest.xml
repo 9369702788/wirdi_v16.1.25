@@ -26,7 +26,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <application android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/network_security_config"
+    <application android:allowBackup="false" android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/network_security_config"
         android:label="Wirdi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

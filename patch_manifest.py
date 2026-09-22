@@ -142,6 +142,15 @@ if 'WirdiWidgetProvider' not in text:
     )
     text = re.sub(r'(</application>)', widget_block + r'\1', text, count=1)
 
+# v1.55: Android Auto Backup is switched OFF. It silently copied SharedPreferences
+# (progress, private reflection journal, 1.4 MB caches) to the user's Google Drive
+# and restored it on other devices, which the privacy policy does not describe.
+# Cloud sync (opt-in, per account) remains the supported way to move data.
+if 'android:allowBackup' not in text:
+    text, n_backup = re.subn(r'<application\b', '<application android:allowBackup="false"', text, count=1)
+    if n_backup != 1:
+        raise SystemExit('ERROR: could not find <application> to disable backup')
+
 path.write_text(text)
 print('AndroidManifest.xml patched:')
 print(text)
