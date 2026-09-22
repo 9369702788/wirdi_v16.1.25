@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../core/services/notification_service.dart';
 import '../../core/services/prayer_notification_scheduler.dart';
@@ -201,6 +202,44 @@ class _NotificationDiagnosticsScreenState extends State<NotificationDiagnosticsS
                   },
                   icon: const Icon(Icons.schedule_send_outlined),
                   label: Text(_t(context, 'اختبار إشعار مجدول (دقيقة)', 'Test scheduled notification (1 min)')),
+                ),
+                const SizedBox(height: 20),
+                // v1.55: battery optimisation is the #1 reason the adhan is late or
+                // missing on Samsung / Xiaomi / Oppo phones.
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          const Icon(Icons.battery_alert_outlined, color: AppColors.mutedText),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _t(context, 'إذا تأخر الأذان أو لم يصل', 'If the adhan is late or missing'),
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ]),
+                        const SizedBox(height: 8),
+                        Text(
+                          _t(
+                            context,
+                            'على بعض الأجهزة (سامسونج، شاومي، أوبو…) قد يوقف النظام التطبيق في الخلفية فيتأخر الأذان أو لا يصل. افتح إعدادات التطبيق ثم البطارية واختر «غير مقيّد» (أو «بدون قيود»)، وفعّل «التشغيل التلقائي» إن وُجد.',
+                            'On some phones (Samsung, Xiaomi, Oppo...) the system may stop apps in the background, so the adhan can be late or missing. Open the app settings, then Battery, and choose "Unrestricted" (and enable "Autostart" if your phone has it).',
+                          ),
+                          style: const TextStyle(fontSize: 13, height: 1.6),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () => Geolocator.openAppSettings(),
+                          icon: const Icon(Icons.settings_outlined),
+                          label: Text(_t(context, 'فتح إعدادات التطبيق', 'Open app settings')),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),

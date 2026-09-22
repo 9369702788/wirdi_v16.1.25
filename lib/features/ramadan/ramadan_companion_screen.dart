@@ -8,7 +8,6 @@ import '../../core/services/prayer_service.dart';
 import '../../core/services/user_progress_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../l10n/generated/app_localizations.dart';
-import '../../shared/widgets/mosaic_background.dart';
 
 enum _CountdownTarget { suhoor, iftar, suhoorTomorrow }
 
@@ -177,12 +176,7 @@ class _RamadanCompanionScreenState extends State<RamadanCompanionScreen> {
     };
 
     return Scaffold(
-      appBar: AppBar(
-        foregroundColor: Colors.white,
-        flexibleSpace: const MosaicBackground(col: 2, row: 1, opacity: 0.4),
-        title: Text(l10n.toolRamadanTitle),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(l10n.toolRamadanTitle), centerTitle: true),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error

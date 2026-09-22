@@ -12,8 +12,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../quran/tajweed_legend.dart';
+import '../../core/services/islamic_occasions_service.dart';
 import '../auth/account_screen.dart';
-import '../../shared/widgets/mosaic_background.dart';
 import 'theme_selection_screen.dart';
 import 'about_screen.dart';
 import 'privacy_center_screen.dart';
@@ -47,6 +48,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   int _wirdTarget = 5;
   final AudioPlayer _previewPlayer = AudioPlayer();
+  StreamSubscription<void>? _previewCompleteSub;
   String? _previewingAdhanId;
   DateTime? _quranCachedAt;
   int _downloadedAudioBytes = 0;
@@ -61,7 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadDownloadedAudioSize();
     _loadMathhab();
     _loadRealAppVersion();
-    _previewPlayer.onPlayerComplete.listen((_) { // AUDIT: Consider saving StreamSubscription for proper cleanup
+    _previewCompleteSub = _previewPlayer.onPlayerComplete.listen((_) {
       if (mounted) setState(() => _previewingAdhanId = null);
     });
   }
@@ -110,7 +112,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _previewPlayer.dispose();
+_previewCompleteSub?.cancel();
+        _previewPlayer.dispose();
     super.dispose();
   }
 
@@ -215,12 +218,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final l10n = AppLocalizations.of(context);
     final languageCode = Localizations.localeOf(context).languageCode;
     return Scaffold(
-      appBar: AppBar(
-        foregroundColor: Colors.white,
-        flexibleSpace: const MosaicBackground(col: 0, row: 0, opacity: 0.45),
-        title: Text(l10n.settingsTitle),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(l10n.settingsTitle), centerTitle: true),
       body: ListenableBuilder(
         listenable: appSettings,
         builder: (context, _) {
@@ -453,6 +451,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         activeTrackColor: AppColors.primaryEmerald,
                         onChanged: (value) => appSettings.setShowTajweedColoring(value),
                       ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.palette_outlined, color: AppColors.mutedText),
+                        title: Text(l10n.tajweedLegendTitle),
+                        onTap: () => showTajweedLegend(context),
+                      ),
                       const Divider(height: 24),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -540,6 +544,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           await PrayerService.clearCache();
                           unawaited(_rescheduleAllPrayerReminders());
                         },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              Localizations.localeOf(context).languageCode == 'ar'
+                                  ? 'تعديل التاريخ الهجري (بالأيام)'
+                                  : 'Hijri date adjustment (days)',
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: appSettings.hijriDayOffset <= -2
+                                ? null
+                                : () async {
+                                    await appSettings.setHijriDayOffset(appSettings.hijriDayOffset - 1);
+                                    unawaited(IslamicOccasionsService.scheduleReminders());
+                                  },
+                          ),
+                          Text(
+                            '${appSettings.hijriDayOffset > 0 ? '+' : ''}${appSettings.hijriDayOffset}',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: appSettings.hijriDayOffset >= 2
+                                ? null
+                                : () async {
+                                    await appSettings.setHijriDayOffset(appSettings.hijriDayOffset + 1);
+                                    unawaited(IslamicOccasionsService.scheduleReminders());
+                                  },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Text(

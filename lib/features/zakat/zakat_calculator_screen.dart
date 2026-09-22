@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../l10n/generated/app_localizations.dart';
-import '../../shared/widgets/mosaic_background.dart';
 
 /// Zakat calculator using the standard 2.5% rate on zakatable wealth
 /// held above the nisab threshold for a full lunar year (hawl).
@@ -135,8 +134,6 @@ class _ZakatCalculatorScreenState extends State<ZakatCalculatorScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        foregroundColor: Colors.white,
-        flexibleSpace: const MosaicBackground(col: 4, row: 0, opacity: 0.4),
         title: Text(l10n.zakatTitle),
         centerTitle: true,
         actions: [
