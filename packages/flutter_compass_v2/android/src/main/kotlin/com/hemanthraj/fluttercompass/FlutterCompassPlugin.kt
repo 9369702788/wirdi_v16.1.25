@@ -1,6 +1,7 @@
 package com.hemanthraj.fluttercompass
 
 import android.content.Context
+import android.hardware.GeomagneticField
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -21,6 +22,7 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.FlutterPlugin.FlutterPluginBinding
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.EventChannel.EventSink
+import io.flutter.plugin.common.MethodChannel
 import kotlin.math.abs
 
 
@@ -39,6 +41,7 @@ class FlutterCompassPlugin : FlutterPlugin, EventChannel.StreamHandler {
     private var accelerometerReading = FloatArray(3)
     private var magneticReading = FloatArray(3)
     private var channel: EventChannel? = null
+    private var declinationChannel: MethodChannel? = null
 
     private val isCompassSensorAvailable: Boolean
         get() = rotationSensor != null
@@ -48,12 +51,30 @@ class FlutterCompassPlugin : FlutterPlugin, EventChannel.StreamHandler {
         channel = EventChannel(binding.binaryMessenger, EVENT_NAME)
         getSensors(binding.applicationContext)
         channel?.setStreamHandler(this)
+
+        // Magnetic declination (magnetic north -> true north), used by the Qibla screens.
+        declinationChannel = MethodChannel(binding.binaryMessenger, "wirdi/declination")
+        declinationChannel?.setMethodCallHandler { call, result ->
+            if (call.method == "getDeclination") {
+                val lat = call.argument<Double>("lat") ?: 0.0
+                val lon = call.argument<Double>("lon") ?: 0.0
+                try {
+                    val field = GeomagneticField(lat.toFloat(), lon.toFloat(), 0f, System.currentTimeMillis())
+                    result.success(field.declination.toDouble())
+                } catch (e: Exception) {
+                    result.success(0.0)
+                }
+            } else {
+                result.notImplemented()
+            }
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPluginBinding) {
         unregisterListener()
         cleanSensors()
         channel?.setStreamHandler(null)
+        declinationChannel?.setMethodCallHandler(null)
     }
 
 
