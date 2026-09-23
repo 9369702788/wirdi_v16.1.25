@@ -65,6 +65,30 @@ import '../fatwa/fatwa_screen.dart';
 import '../articles/articles_screen.dart';
 import '../moon/moon_screen.dart';
 
+enum _ToolCategory { quran, prayer, fasting, zakat, azkar, knowledge, seerah, progress }
+
+/// Per-category icon + bilingual label for the section headers. Order here
+/// is also the DISPLAY order of the sections (Quran first, "more/progress"
+/// tools last), matching how closely related each group's tools are to a
+/// user's daily worship flow.
+class _ToolCategoryInfo {
+  final IconData icon;
+  final String titleAr;
+  final String titleEn;
+  const _ToolCategoryInfo(this.icon, this.titleAr, this.titleEn);
+}
+
+const Map<_ToolCategory, _ToolCategoryInfo> _toolCategoryInfo = {
+  _ToolCategory.quran: _ToolCategoryInfo(Icons.menu_book_rounded, 'القرآن والحفظ', 'Quran & Memorization'),
+  _ToolCategory.prayer: _ToolCategoryInfo(Icons.mosque_outlined, 'الصلاة والقبلة', 'Prayer & Qibla'),
+  _ToolCategory.fasting: _ToolCategoryInfo(Icons.nightlight_outlined, 'الصيام ورمضان', 'Fasting & Ramadan'),
+  _ToolCategory.zakat: _ToolCategoryInfo(Icons.volunteer_activism_outlined, 'الزكاة والصدقة', 'Zakat & Charity'),
+  _ToolCategory.azkar: _ToolCategoryInfo(Icons.auto_awesome_outlined, 'الأذكار والدعاء', 'Azkar & Dua'),
+  _ToolCategory.knowledge: _ToolCategoryInfo(Icons.school_outlined, 'المعرفة والحديث', 'Knowledge & Hadith'),
+  _ToolCategory.seerah: _ToolCategoryInfo(Icons.history_edu, 'السيرة والتاريخ', 'Seerah & History'),
+  _ToolCategory.progress: _ToolCategoryInfo(Icons.insights_outlined, 'التقدم والمزيد', 'Progress & More'),
+};
+
 class _ToolEntry {
   final IconData icon;
   final String Function(AppLocalizations) titleFor;
@@ -436,35 +460,175 @@ class IslamicToolsScreen extends StatelessWidget {
     ),
   ];
 
+  /// Category for `_tools[i]`, by POSITION -- see the derivation comment
+  /// above `_ToolCategory`. Kept separate from `_tools` on purpose so every
+  /// existing `_ToolEntry(...)` entry above is untouched. The assertion
+  /// below fires immediately (debug builds) if a future edit adds/removes a
+  /// tool without updating this list, instead of silently mis-grouping it.
+  static const List<_ToolCategory> _categoryByIndex = [
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.quran,
+    _ToolCategory.knowledge,
+    _ToolCategory.knowledge,
+    _ToolCategory.knowledge,
+    _ToolCategory.knowledge,
+    _ToolCategory.knowledge,
+    _ToolCategory.knowledge,
+    _ToolCategory.prayer,
+    _ToolCategory.prayer,
+    _ToolCategory.prayer,
+    _ToolCategory.prayer,
+    _ToolCategory.prayer,
+    _ToolCategory.prayer,
+    _ToolCategory.prayer,
+    _ToolCategory.prayer,
+    _ToolCategory.prayer,
+    _ToolCategory.prayer,
+    _ToolCategory.fasting,
+    _ToolCategory.fasting,
+    _ToolCategory.fasting,
+    _ToolCategory.zakat,
+    _ToolCategory.zakat,
+    _ToolCategory.zakat,
+    _ToolCategory.zakat,
+    _ToolCategory.zakat,
+    _ToolCategory.zakat,
+    _ToolCategory.azkar,
+    _ToolCategory.azkar,
+    _ToolCategory.azkar,
+    _ToolCategory.azkar,
+    _ToolCategory.azkar,
+    _ToolCategory.seerah,
+    _ToolCategory.seerah,
+    _ToolCategory.seerah,
+    _ToolCategory.seerah,
+    _ToolCategory.seerah,
+    _ToolCategory.seerah,
+    _ToolCategory.knowledge,
+    _ToolCategory.knowledge,
+    _ToolCategory.seerah,
+    _ToolCategory.knowledge,
+    _ToolCategory.knowledge,
+    _ToolCategory.progress,
+    _ToolCategory.progress,
+    _ToolCategory.progress,
+    _ToolCategory.progress,
+    _ToolCategory.progress,
+    _ToolCategory.progress,
+    _ToolCategory.progress,
+    _ToolCategory.prayer,
+    _ToolCategory.progress,
+  ];
+
+  static Map<_ToolCategory, List<_ToolEntry>> _groupedTools() {
+    assert(
+      _categoryByIndex.length == _tools.length,
+      '_categoryByIndex (\${_categoryByIndex.length}) must have exactly one entry per tool in _tools (\${_tools.length}) -- update it when adding/removing a tool.',
+    );
+    final grouped = <_ToolCategory, List<_ToolEntry>>{};
+    for (var i = 0; i < _tools.length; i++) {
+      final category = i < _categoryByIndex.length ? _categoryByIndex[i] : _ToolCategory.progress;
+      (grouped[category] ??= []).add(_tools[i]);
+    }
+    return grouped;
+  }
+
+  // v1.55: the 62 tools used to be one long flat list, hard to scan.
+  // Grouped here into 8 categories by how closely each tool relates to the
+  // others (Quran/memorization, Prayer/Qibla, Fasting, Zakat, Azkar/Dua,
+  // Knowledge/Hadith, Seerah/History, Progress/More) -- same tools, same
+  // navigation (`onTap` still calls the exact same `tool.builder`), just
+  // organized. A tool's ROW widget (icon, title, subtitle, tap target) is
+  // unchanged from before; only the surrounding structure (section headers,
+  // grouping) is new.
+  Widget _toolRow(BuildContext context, AppLocalizations l10n, _ToolEntry tool) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        leading: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: AppColors.primaryEmerald.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(tool.icon, color: AppColors.primaryEmerald),
+        ),
+        title: Text(tool.titleFor(l10n), style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(tool.subtitleFor(l10n), style: const TextStyle(fontSize: 12)),
+        trailing: Icon(Icons.chevron_left, color: Colors.grey.shade400, size: 20),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: tool.builder)),
+      ),
+    );
+  }
+
+  Widget _sectionHeader(BuildContext context, _ToolCategory category) {
+    final info = _toolCategoryInfo[category]!;
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppColors.goldAccent.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(info.icon, color: AppColors.goldAccent, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            isAr ? info.titleAr : info.titleEn,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.primaryEmerald),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final grouped = _groupedTools();
+    // Fixed display order regardless of Map iteration order.
+    const order = [
+      _ToolCategory.quran,
+      _ToolCategory.prayer,
+      _ToolCategory.fasting,
+      _ToolCategory.zakat,
+      _ToolCategory.azkar,
+      _ToolCategory.knowledge,
+      _ToolCategory.seerah,
+      _ToolCategory.progress,
+    ];
+
     return Scaffold(
       appBar: AppBar(title: Text(l10n.toolsTitle), centerTitle: true),
-      body: ListView.separated(
+      body: ListView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
-        itemCount: _tools.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (context, index) {
-          final tool = _tools[index];
-          return Card(
-            child: ListTile(
-              leading: Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryEmerald.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(tool.icon, color: AppColors.primaryEmerald),
-              ),
-              title: Text(tool.titleFor(l10n), style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(tool.subtitleFor(l10n), style: const TextStyle(fontSize: 12)),
-              trailing: Icon(Icons.chevron_left, color: Colors.grey.shade400, size: 20),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: tool.builder)),
-            ),
-          );
-        },
+        children: [
+          for (final category in order)
+            if (grouped[category]?.isNotEmpty ?? false) ...[
+              _sectionHeader(context, category),
+              for (final tool in grouped[category]!) ...[
+                _toolRow(context, l10n, tool),
+                const SizedBox(height: 10),
+              ],
+              const SizedBox(height: 14),
+            ],
+        ],
       ),
     );
   }
