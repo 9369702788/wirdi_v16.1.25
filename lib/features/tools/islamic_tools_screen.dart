@@ -591,7 +591,7 @@ class IslamicToolsScreen extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             isAr ? info.titleAr : info.titleEn,
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.primaryEmerald),
+            style:  TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.primaryEmerald),
           ),
         ],
       ),
