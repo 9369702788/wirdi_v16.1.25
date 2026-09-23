@@ -25,6 +25,7 @@ import '../../core/services/settings_service.dart';
 import '../../core/services/widget_service.dart';
 import '../../core/services/user_progress_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/wirdi_identity_background.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../azkar/azkar_screen.dart';
 import '../favorites/favorites_screen.dart';
@@ -287,15 +288,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         centerTitle: true,
         backgroundColor: AppColors.darkBackground,
         foregroundColor: Colors.white,
-        flexibleSpace: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppColors.darkBackground, AppColors.primaryEmerald],
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-            ),
-          ),
-        ),
+        // v1.55: the flat 2-color gradient was replaced with the shared
+        // WirdiIdentityBackground (mosque-skyline + crescent vector art),
+        // matching the visual-identity brief's photographic header look
+        // without adding any image asset. Purely decorative -- everything
+        // else in this AppBar (title, actions) is unchanged.
+        flexibleSpace: const WirdiIdentityBackground(),
         actions: [
           TextButton.icon(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const IslamicToolsScreen())),
