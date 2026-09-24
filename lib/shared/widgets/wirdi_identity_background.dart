@@ -23,7 +23,8 @@ class WirdiIdentityBackground extends StatelessWidget {
     this.variant = WirdiSkylineVariant.night,
     this.showCrescent = true,
     this.silhouetteOpacity = 0.9,
-  });
+  })  : photo = null,
+        scrimOpacity = 0.55;
 
   /// Convenience for a full-screen hero section (e.g. behind a Stack at the
   /// top of a screen's body), a bit taller and with the crescent higher up.
@@ -32,15 +33,62 @@ class WirdiIdentityBackground extends StatelessWidget {
     this.child,
     this.variant = WirdiSkylineVariant.night,
   })  : showCrescent = true,
-        silhouetteOpacity = 1.0;
+        silhouetteOpacity = 1.0,
+        photo = null,
+        scrimOpacity = 0.55;
 
   final Widget? child;
   final WirdiSkylineVariant variant;
   final bool showCrescent;
   final double silhouetteOpacity;
 
+  /// A real bundled photo instead of the vector skyline (see
+  /// [WirdiIdentityBackground.photo]). When set, [variant]/[showCrescent]/
+  /// [silhouetteOpacity] are ignored.
+  final WirdiIdentityPhoto? photo;
+
+  /// Uses one of the app's own bundled scenic photos (see
+  /// [WirdiIdentityPhoto]) instead of the vector illustration -- for screens
+  /// that want the same photographic hero look as the visual-identity brief's
+  /// mock-ups. The photo is covered by a gradient scrim so foreground text
+  /// stays legible, matching the dark-hero screens in the brief (Home,
+  /// Qibla, Radio, Moon).
+  const WirdiIdentityBackground.photo({
+    super.key,
+    required this.photo,
+    this.child,
+    this.scrimOpacity = 0.55,
+  })  : variant = WirdiSkylineVariant.night,
+        showCrescent = false,
+        silhouetteOpacity = 0.0;
+
+  /// Scrim darkness (0.0-1.0) over a [photo] background; ignored for the
+  /// vector variants.
+  final double scrimOpacity;
+
   @override
   Widget build(BuildContext context) {
+    if (photo != null) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(photo!.asset, fit: BoxFit.cover),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  AppColors.darkBackground.withValues(alpha: scrimOpacity * 0.7),
+                  AppColors.darkBackground.withValues(alpha: scrimOpacity),
+                ],
+              ),
+            ),
+          ),
+          if (child != null) child!,
+        ],
+      );
+    }
     return DecoratedBox(
       decoration: BoxDecoration(gradient: _skyGradient(variant)),
       child: CustomPaint(
@@ -73,6 +121,23 @@ class WirdiIdentityBackground extends StatelessWidget {
 }
 
 enum WirdiSkylineVariant { night, sunset }
+
+/// The app's own bundled scenic photos (`assets/images/identity/`), restored
+/// from the original project's design-brief renders and cropped clean of the
+/// mock-up chrome they originally had baked into them (fake back buttons,
+/// titles, a date stamp, placeholder cards) so they're safe to use as real
+/// in-app backgrounds instead of only reference art.
+enum WirdiIdentityPhoto {
+  homeScenery('assets/images/identity/home_scenery.webp'),
+  kaabaNight('assets/images/identity/kaaba_night.webp'),
+  mosqueSunset('assets/images/identity/mosque_sunset.webp'),
+  moonNight('assets/images/identity/moon_night.webp'),
+  quranMosque('assets/images/identity/quran_mosque.webp'),
+  lanternSunset('assets/images/identity/lantern_sunset.webp');
+
+  final String asset;
+  const WirdiIdentityPhoto(this.asset);
+}
 
 /// Paints a simple domed-mosque + two minarets + crescent silhouette,
 /// anchored to the bottom of the available area, plus a few star dots.
