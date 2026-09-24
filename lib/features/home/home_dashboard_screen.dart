@@ -288,12 +288,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         centerTitle: true,
         backgroundColor: AppColors.darkBackground,
         foregroundColor: Colors.white,
-        // v1.55: the flat 2-color gradient was replaced with the shared
-        // WirdiIdentityBackground (mosque-skyline + crescent vector art),
-        // matching the visual-identity brief's photographic header look
-        // without adding any image asset. Purely decorative -- everything
-        // else in this AppBar (title, actions) is unchanged.
-        flexibleSpace: const WirdiIdentityBackground(),
+        // v1.55: the flat 2-color gradient was replaced with a shared
+        // background component. v1.56.2: that was upgraded again, from a
+        // vector skyline illustration to one of the app's own bundled
+        // scenic photos, matching the visual-identity brief's photographic
+        // header look exactly (not just an illustration in brand colors).
+        flexibleSpace: const WirdiIdentityBackground.photo(photo: WirdiIdentityPhoto.homeScenery),
         actions: [
           TextButton.icon(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const IslamicToolsScreen())),

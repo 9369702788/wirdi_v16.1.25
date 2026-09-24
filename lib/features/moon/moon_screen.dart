@@ -5,6 +5,7 @@ import '../../core/services/moon_calculator.dart';
 import '../../core/services/moon_phases_service.dart';
 import '../../core/services/moon_sighting_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/wirdi_identity_background.dart';
 
 class MoonScreen extends StatefulWidget {
   const MoonScreen({super.key});
@@ -44,7 +45,8 @@ class _MoonScreenState extends State<MoonScreen> {
     return Scaffold(
       appBar: AppBar(
         foregroundColor: Colors.white,
-        flexibleSpace: _MosaicBg(col: 1, row: 1, opacity: 0.5),
+        // v1.56.2: real bundled moon photo instead of the generic mosaic tile.
+        flexibleSpace: const WirdiIdentityBackground.photo(photo: WirdiIdentityPhoto.moonNight, scrimOpacity: 0.30),
         title: Text(isAr ? 'القمر وأطواره' : 'Moon Phase'),
         centerTitle: true,
       ),

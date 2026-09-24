@@ -21,6 +21,7 @@ import '../../core/services/tafsir_repository.dart';
 import '../../core/services/transliteration_repository.dart';
 import '../../core/services/user_progress_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/wirdi_identity_background.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../mushaf/mushaf_view_screen.dart';
 import '../../core/services/bookmark_service.dart';
@@ -90,7 +91,8 @@ class _QuranScreenState extends State<QuranScreen> with SingleTickerProviderStat
     return Scaffold(
       appBar: AppBar(
         foregroundColor: Colors.white,
-        flexibleSpace: _MosaicBg(col: 3, row: 0, opacity: 0.4),
+        // v1.56.2: real bundled Quran/mosque photo instead of the generic mosaic tile.
+        flexibleSpace: const WirdiIdentityBackground.photo(photo: WirdiIdentityPhoto.quranMosque, scrimOpacity: 0.45),
         title: Directionality(textDirection: TextDirection.rtl, child: Text(l10n.quranTitle)),
         centerTitle: true,
         actions: [

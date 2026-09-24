@@ -15,6 +15,7 @@ import '../../core/services/moon_calculator.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/services/user_progress_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/wirdi_identity_background.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../core/services/weather_service.dart';
 import '../../core/services/sunrise_sunset_calculator.dart';
@@ -345,7 +346,8 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
     return Scaffold(
       appBar: AppBar(
         foregroundColor: Colors.white,
-        flexibleSpace: _MosaicBg(col: 4, row: 0, opacity: 0.4),
+        // v1.56.2: real bundled mosque-at-sunset photo instead of the generic mosaic tile.
+        flexibleSpace: const WirdiIdentityBackground.photo(photo: WirdiIdentityPhoto.mosqueSunset, scrimOpacity: 0.40),
         title: Text(l10n.prayerTimesTitle),
         centerTitle: true,
         actions: [

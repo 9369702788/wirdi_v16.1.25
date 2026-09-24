@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../core/services/qibla_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/wirdi_identity_background.dart';
 import '../../l10n/generated/app_localizations.dart';
 import 'qibla_camera_screen.dart';
 
@@ -105,7 +106,8 @@ class _QiblaScreenState extends State<QiblaScreen> {
     return Scaffold(
       appBar: AppBar(
         foregroundColor: Colors.white,
-        flexibleSpace: _MosaicBg(col: 0, row: 1, opacity: 0.4),
+        // v1.56.2: real bundled Kaaba photo instead of the generic mosaic tile.
+        flexibleSpace: const WirdiIdentityBackground.photo(photo: WirdiIdentityPhoto.kaabaNight, scrimOpacity: 0.35),
         title: Text(l10n.qiblaTitle),
         centerTitle: true,
         actions: [

@@ -9,6 +9,7 @@ import '../../core/services/arabic_text_utils.dart';
 import '../../core/services/azkar_repository.dart';
 import '../../core/services/user_progress_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/wirdi_identity_background.dart';
 import '../../l10n/generated/app_localizations.dart';
 
 class AzkarScreen extends StatefulWidget {
@@ -53,7 +54,10 @@ class _AzkarScreenState extends State<AzkarScreen> with SingleTickerProviderStat
     return Scaffold(
       appBar: AppBar(
         foregroundColor: Colors.white,
-        flexibleSpace: _MosaicBg(col: 2, row: 1, opacity: 0.4),
+        // v1.56.2: real bundled lantern photo instead of the generic mosaic tile
+        // (the second, low-opacity _MosaicBg further down in this screen's body
+        // is untouched -- only this AppBar background changed).
+        flexibleSpace: const WirdiIdentityBackground.photo(photo: WirdiIdentityPhoto.lanternSunset, scrimOpacity: 0.40),
         title: Text(l10n.azkarDuasTitle),
         centerTitle: true,
         bottom: TabBar(
