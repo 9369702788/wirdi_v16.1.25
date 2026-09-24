@@ -591,7 +591,14 @@ class IslamicToolsScreen extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             isAr ? info.titleAr : info.titleEn,
-            style:  TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.primaryEmerald),
+            // NOT const: AppColors.primaryEmerald is a `static Color get`
+            // (the app supports switchable color themes), not a compile-time
+            // constant -- a `const TextStyle` referencing it fails
+            // `flutter analyze` with "Invalid constant value". This exact
+            // trap is documented in this repo's own MERGE_NOTES.md from an
+            // earlier fix (v133/v239); caught here by actually running the
+            // CI's `flutter analyze` step, not just a syntax check.
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.primaryEmerald),
           ),
         ],
       ),
