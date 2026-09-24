@@ -1,7 +1,7 @@
 name: wirdi
 description: "وردي — Islamic daily Quran, Azkar, Prayer & Tasbeeh companion."
 publish_to: 'none'
-version: 1.56.0+22
+version: 1.56.2+24
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -61,3 +61,4 @@ flutter:
     - assets/images/moon_phases/
     - assets/images/wirdi_mosaic.webp
     - assets/images/generated/
+    - assets/images/identity/

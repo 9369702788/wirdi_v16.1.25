@@ -66,3 +66,100 @@ different aspect ratios before use. **Not verified:** actual rendering on a devi
 in `flutter analyze` -- check that the Home AppBar's title/actions stay legible over
 the new background at your test device's text scale, and that the tools screen scrolls
 and looks right with real fonts/locale (especially Arabic RTL section headers).
+
+## v1.56.1 (build 23) -- fix for the first real `flutter analyze` run
+The first CI run against this code caught a real bug this environment's syntax-only
+checks could not: `flutter analyze` failed with `Invalid constant value` at
+`islamic_tools_screen.dart:594:86`.
+
+**Cause:** `AppColors.primaryEmerald` and `AppColors.goldAccent` are `static Color get`
+getters, not compile-time constants (the app supports switchable color themes) --
+documented in this repo's own `MERGE_NOTES.md` from an earlier, identical bug at
+v133/v239. The new `_sectionHeader` widget's `Text` style used
+`const TextStyle(..., color: AppColors.primaryEmerald)`, which is invalid for the same
+reason.
+
+**Fix:** dropped the `const` on that one `TextStyle` (line 594). Re-checked the whole
+repo for the same mistake two ways -- a plain substring scan and a balanced-paren scan
+that reconstructs each `const` call's full argument list -- and confirmed zero other
+occurrences of either getter inside a `const` expression, in this file or anywhere
+else in `lib/`.
+
+This is a genuine reminder that everything before this point in the review was
+syntax-checked only, never compiled: this class of bug (a non-const value inside a
+`const` expression) is invisible to a parser and only shows up under `flutter analyze`
+or `dart analyze`, which is exactly what caught it. If another `flutter analyze` run
+surfaces something else, paste the log back and it'll get the same targeted fix.
+
+## v1.56.2 (build 24) -- real photos restored and wired in (fixes "الصور مش مضافة")
+
+The previous pass (v1.56.0) only added a hand-drawn vector illustration, and only to
+one screen (Home's AppBar). The user pointed out, correctly, that the app's pages
+still didn't look like the reference mood board and that no actual images had been
+added. Looking into it surfaced a real mistake from an earlier pass:
+
+**The mistake:** during the v1.55 cleanup, `assets/images/ui/` (6 photos --
+`home_scenery`, `kaaba_night`, `lantern_sunset`, `moon_night`, `mosque_sunset`,
+`quran_mosque`) was deleted as "unused dead weight" because nothing in the code
+referenced them. They were real, already-licensed project assets (present in the
+originally uploaded project, not fetched from anywhere) that matched the mood
+board's own "backgrounds used in the app" section almost exactly -- they just hadn't
+been wired into any screen yet. Deleting them instead of asking why they existed was
+the actual error, not that they were unreferenced.
+
+**What they actually were:** design-brief mock-up renders, not clean background
+photos -- 4 of the 6 had fake UI elements baked directly into the pixels (a back
+button and "المدينة" label on `kaaba_night`, three ghost icon circles on
+`mosque_sunset`, a hard-coded date stamp on `moon_night`, a full title bar and two
+white placeholder cards on `quran_mosque`). That's almost certainly *why* the original
+code never used them as real backgrounds -- placing real UI on top would have
+duplicated or clashed with the baked-in fake UI. This pass cropped each one down to
+the clean photographic part only (verified visually before/after each crop) and
+re-encoded all 6 as WebP in `assets/images/identity/` (138 KB total, down from 475 KB
+of raw JPEG) -- `assets/images/ui/` was not restored, since these cleaned copies
+replace it.
+
+**`WirdiIdentityBackground` now supports real photos**, via a new
+`.photo(photo: WirdiIdentityPhoto.xxx)` constructor (photo + dark gradient scrim for
+text legibility + optional child) alongside the existing vector variants -- nothing
+about the existing vector API changed, so it's purely additive.
+
+**Wired into six screens' AppBars** (found, while doing this, that the app already had
+a *different*, pre-existing background mechanism -- a private `_MosaicBg` widget
+tiling `wirdi_mosaic.webp` at low opacity, duplicated separately in 10 screen files.
+That mechanism already gave the app a consistent decorative AppBar background almost
+everywhere; it just wasn't the photographic mood-board look specifically requested):
+
+| Screen | Photo | Was |
+|---|---|---|
+| Home | `home_scenery` (skyline reflected in water) | vector skyline (v1.56.0) |
+| Qibla | `kaaba_night` | `_MosaicBg` tile pattern |
+| Quran | `quran_mosque` (Quran cover on green pattern) | `_MosaicBg` tile pattern |
+| Moon | `moon_night` | `_MosaicBg` tile pattern |
+| Prayer Times | `mosque_sunset` | `_MosaicBg` tile pattern |
+| Azkar | `lantern_sunset` | `_MosaicBg` tile pattern (AppBar only -- a second, unrelated low-opacity `_MosaicBg` further down in the screen's body was left untouched) |
+
+Each swap was the same isolated, same-slot change as Home's in v1.56.0 -- only the
+`flexibleSpace:` line changed; nothing else on any of these six screens (their actual
+functionality, data, lists) was touched. The now-unused private `_MosaicBg` class in
+each of these 5 files (it's duplicated per-file, not shared) was deliberately left in
+place rather than deleted, since it's a harmless unused-private-class warning at worst
+(not an error `flutter analyze` fails on) and removing 5 separate duplicated class
+definitions safely was out of scope for this pass.
+
+**Not changed:** Radio, Radio "now playing", Account, and Splash still use
+`_MosaicBg`/their own existing background (Splash already had a real photo of its
+own from before this work). The other ~87 screens in the app still have no scenic
+background at all -- this pass covered the mood board's own example screens (Home,
+Quran, Azkar, Qibla, Radio was already photographic, Moon) plus Prayer Times, not
+the entire app.
+
+**Verified:** every touched/new file re-parsed with zero syntax errors; the
+const/non-const-getter scan (the exact class of bug `flutter analyze` caught in
+build 23) was re-run across the whole repo after these changes and found nothing;
+every image path the code references was confirmed to exist on disk and be covered by
+the `pubspec.yaml` asset declaration. **Not verified:** actual rendering -- check
+image contrast/text legibility on Qibla and Moon in particular (their `scrimOpacity`
+values were chosen by eye from the cropped preview images, not measured against real
+device brightness), and confirm `flutter analyze` is clean (this is the second batch
+of Dart code in this project that has never been run through a real compiler).
