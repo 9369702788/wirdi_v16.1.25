@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:just_audio/just_audio.dart' as ja;
 
 import '../data/app_sources.dart';
 import '../models/quran_models.dart';
@@ -11,39 +11,42 @@ import 'playback_coordinator.dart';
 import 'settings_service.dart';
 import 'surah_progress_model.dart';
 
-/// App-wide Quran audio playback, deliberately NOT owned by any single
-/// screen's State  a screen-owned player is destroyed the moment the
-/// user navigates away (e.g. switching bottom-nav tabs), which used to
-/// stop playback. Living here means playback survives navigation, and
-/// both the Surah reader and the Mushaf page view can control/observe
-/// the exact same playback session.
+/// App-wide Quran playback.
 ///
-/// Uses two alternating players for near-gapless "play whole surah": while
-/// one ayah plays, the next is silently preloaded into the other, so
-/// advancing doesn't need to wait for a fresh network fetch.
+/// The previous implementation used two independent `audioplayers` instances:
+/// one active player and one preloaded player. That reduced network latency, but
+/// every ayah still ended one native player and resumed another one. This can
+/// create a small audible hole between ayahs.
 ///
-/// v1.55 playback fixes (see also SurahProgressModel):
-///  * REMOVED the "advance a few ms before the end" shortcut. It compared the
-///    playing position with a `duration` that was still the PREVIOUS ayah's
-///    after a preloaded hand-off, so a longer ayah following a shorter one was
-///    cut off after a few seconds and playback jumped ahead. An ayah now only
-///    ends when its player reports completion.
-///  * A stream that reports "completed" long before its known duration is
-///    retried from where it stopped instead of skipping to the next ayah.
-///  * Preloads carry a generation token, so a late/stale preload can never mark
-///    the wrong ayah as ready.
-///  * The playback speed is applied to the preloaded player at hand-off.
-///  * Progress is exposed at SURAH level ([surahProgress], [surahElapsed],
-///    [surahEstimatedTotal], [seekToSurahProgress]).
+/// This implementation uses ONE just_audio playlist. just_audio is designed for
+/// gapless playlist playback and keeps the next item in the same native player
+/// pipeline, while still allowing us to highlight the current ayah from the
+/// playlist index.
 class QuranAudioService extends ChangeNotifier {
-  QuranAudioService._();
+  QuranAudioService._() {
+    _bindPlayer();
+  }
+
   static final QuranAudioService instance = QuranAudioService._();
 
-  final AudioPlayer _playerA = AudioPlayer();
-  final AudioPlayer _playerB = AudioPlayer();
-  late AudioPlayer _active;
-  late AudioPlayer _standby;
-  bool _initialized = false;
+  final ja.AudioPlayer _player = ja.AudioPlayer(
+    // Let just_audio prepare upcoming playlist items as needed.
+    useLazyPreparation: true,
+    handleInterruptions: true,
+    androidApplyAudioAttributes: true,
+    handleAudioSessionActivation: true,
+  );
+
+  StreamSubscription<int?>? _indexSub;
+  StreamSubscription<Duration?>? _durationSub;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<ja.PlayerState>? _stateSub;
+  StreamSubscription<ja.PositionDiscontinuity>? _discontinuitySub;
+  StreamSubscription<ja.PlayerException>? _errorSub;
+
+  bool _bound = false;
+  bool _stopping = false;
+  int _playToken = 0;
 
   int? _surahNumber;
   String? _surahName;
@@ -51,6 +54,8 @@ class QuranAudioService extends ChangeNotifier {
   int _totalAyahsInSurah = 0;
   int? _rangeStartAyah;
   int? _rangeEndAyah;
+  int _playlistStartAyah = 1;
+  int _playlistEndAyah = 1;
 
   int? playingAyah;
   bool playingWholeSurah = false;
@@ -61,460 +66,447 @@ class QuranAudioService extends ChangeNotifier {
   double playbackRate = 1.0;
   bool repeatSurah = false;
 
-  /// Position inside the CURRENT ayah.
   Duration position = Duration.zero;
-
-  /// Length of the CURRENT ayah.
   Duration duration = Duration.zero;
-
-  /// Which ayah number (if any) has been successfully preloaded into
-  /// [_standby]. [_advanceSequential] only resumes [_standby] when this matches
-  /// the ayah it is advancing to; otherwise it falls back to a fresh fetch.
-  int? _preloadedAyah;
-  int _preloadGeneration = 0;
-  bool _advanceInProgress = false;
-
-  /// Incremented by every fresh play so a superseded call can't clobber state.
-  int _playToken = 0;
-
-  /// Which ayah each physical player currently holds / its reported length.
-  final Map<AudioPlayer, int> _loadedAyah = {};
-  final Map<AudioPlayer, Duration> _playerDuration = {};
-
-  int _prematureRetries = 0;
-  int _stallRetries = 0;
-  Timer? _stallTimer;
 
   final SurahProgressModel _progress = SurahProgressModel();
   int? _durationsSurah;
   String? _durationsReciter;
 
-  /// The surah currently loaded for playback, or null if nothing is
-  /// playing. Exposed for UI (e.g. a global mini-player) that needs to
-  /// display what's playing without already knowing the surah number.
+  int get totalAyahsInSurah => _totalAyahsInSurah;
   int? get currentSurahNumber => _surahNumber;
   String? get currentSurahName => _surahName;
-  int get totalAyahsInSurah => _totalAyahsInSurah;
 
   bool isPlayingFor(int surahNumber, int ayahNumber) =>
       _surahNumber == surahNumber && playingAyah == ayahNumber;
 
   bool isSurahActive(int surahNumber) => _surahNumber == surahNumber;
 
-  // ---------------------------------------------------------------------------
-  // Surah-level progress
-  // ---------------------------------------------------------------------------
-
-  /// First / last ayah of the span the progress bar covers (the played range,
-  /// or the whole surah).
-  int get scopeStartAyah => _progress.scopeStart;
-  int get scopeEndAyah => _progress.scopeEnd;
-
-  /// 0.0 - 1.0 progress through the surah (or the played range).
   double get surahProgress {
     final ayah = playingAyah;
     if (ayah == null || _progress.isEmpty) return 0.0;
-    return _progress.progress(ayah: ayah, position: position, duration: duration);
+    return _progress.progress(
+      ayah: ayah,
+      position: position,
+      duration: duration,
+    );
   }
 
-  /// Time played so far in the surah (exact for ayahs that were measured).
   Duration get surahElapsed {
     final ayah = playingAyah;
     if (ayah == null || _progress.isEmpty) return Duration.zero;
-    return _progress.elapsed(ayah: ayah, position: position, duration: duration);
+    return _progress.elapsed(
+      ayah: ayah,
+      position: position,
+      duration: duration,
+    );
   }
 
-  /// Total length of the surah; an estimate until every ayah has been measured
-  /// (see [isSurahTotalExact]).
-  Duration get surahEstimatedTotal => _progress.isEmpty ? Duration.zero : _progress.estimatedTotal;
-  bool get isSurahTotalExact => !_progress.isEmpty && _progress.isTotalExact;
+  Duration get surahEstimatedTotal =>
+      _progress.isEmpty ? Duration.zero : _progress.estimatedTotal;
 
-  /// Which ayah a surah-level slider [fraction] points at (for a live label
-  /// while dragging).
-  int ayahAtSurahProgress(double fraction) => _progress.isEmpty ? (playingAyah ?? 1) : _progress.locate(fraction).ayah;
+  bool get isSurahTotalExact =>
+      !_progress.isEmpty && _progress.isTotalExact;
 
-  /// Seeks using a surah-level [fraction]. Inside the current ayah it seeks
-  /// within it; to another ayah it jumps to the start of that ayah, keeping the
-  /// current mode (single ayah / whole surah / range).
+  int ayahAtSurahProgress(double fraction) =>
+      _progress.isEmpty ? (playingAyah ?? 1) : _progress.locate(fraction).ayah;
+
   Future<void> seekToSurahProgress(double fraction) async {
     final current = playingAyah;
     if (current == null || _progress.isEmpty) return;
-    final target = _progress.locate(fraction);
 
+    final target = _progress.locate(fraction);
     if (target.ayah == current) {
       if (duration > Duration.zero) {
-        await seek(Duration(milliseconds: (duration.inMilliseconds * target.within).round()));
+        await seek(Duration(
+          milliseconds: (duration.inMilliseconds * target.within).round(),
+        ));
       }
       return;
     }
 
-    isPaused = false;
     final wasWhole = playingWholeSurah;
-    await _playAyahAudio(target.ayah);
-    if (wasWhole) unawaited(_preloadNext(target.ayah + 1));
-  }
-
-  // ---------------------------------------------------------------------------
-  // Setup
-  // ---------------------------------------------------------------------------
-
-  void _ensureInit() {
-    if (_initialized) return;
-    _active = _playerA;
-    _standby = _playerB;
-
-    // Each listener is bound to the concrete player object (not to the mutable
-    // _active/_standby fields, which get swapped during playback).
-    for (final player in [_playerA, _playerB]) {
-      player.onPlayerComplete.listen((_) => _handleComplete(player));
-      player.onPositionChanged.listen((p) {
-        if (identical(player, _active)) {
-          position = p;
-          notifyListeners();
-        }
-      });
-      player.onDurationChanged.listen((d) => _onPlayerDuration(player, d));
+    if (target.ayah < _playlistStartAyah ||
+        target.ayah > _playlistEndAyah) {
+      return;
     }
 
-    _initialized = true;
+    isPaused = false;
+    final index = target.ayah - _playlistStartAyah;
+    try {
+      await _player.seek(
+        Duration(
+          milliseconds:
+              target.ayah == current && duration > Duration.zero
+                  ? (duration.inMilliseconds * target.within).round()
+                  : 0,
+        ),
+        index: index,
+      );
+      playingAyah = target.ayah;
+      position = Duration.zero;
+      duration = _player.duration ?? Duration.zero;
+      if (!wasWhole) {
+        playingWholeSurah = false;
+      }
+      unawaited(_player.play());
+      notifyListeners();
+    } catch (e, st) {
+      AppLogger.error(
+        'Failed to seek Quran surah progress',
+        error: e,
+        stackTrace: st,
+      );
+    }
   }
 
-  void _onPlayerDuration(AudioPlayer player, Duration d) {
-    if (d <= Duration.zero) return;
-    _playerDuration[player] = d;
-    final ayah = _loadedAyah[player];
-    if (ayah != null) _progress.setKnownDuration(ayah, d);
-    if (identical(player, _active)) duration = d;
-    notifyListeners();
+  void _bindPlayer() {
+    if (_bound) return;
+    _bound = true;
+
+    _indexSub = _player.currentIndexStream.listen((index) {
+      if (_stopping || index == null) return;
+
+      final ayah = _playlistStartAyah + index;
+      if (ayah < _playlistStartAyah || ayah > _playlistEndAyah) return;
+
+      playingAyah = ayah;
+      position = _player.position;
+      duration = _player.duration ?? Duration.zero;
+      isBuffering = _player.processingState == ja.ProcessingState.loading ||
+          _player.processingState == ja.ProcessingState.buffering;
+
+      if (duration > Duration.zero) {
+        _progress.setKnownDuration(ayah, duration);
+      }
+      notifyListeners();
+    });
+
+    _positionSub = _player.positionStream.listen((p) {
+      if (_stopping) return;
+      position = p;
+      final ayah = playingAyah;
+      if (ayah != null && duration > Duration.zero) {
+        _progress.setKnownDuration(ayah, duration);
+      }
+      notifyListeners();
+    });
+
+    _durationSub = _player.durationStream.listen((d) {
+      if (_stopping || d == null || d <= Duration.zero) return;
+      duration = d;
+      final ayah = playingAyah;
+      if (ayah != null) {
+        _progress.setKnownDuration(ayah, d);
+      }
+      notifyListeners();
+    });
+
+    _stateSub = _player.playerStateStream.listen((state) {
+      if (_stopping) return;
+
+      isPaused = !state.playing &&
+          state.processingState != ja.ProcessingState.completed;
+      isBuffering = state.processingState == ja.ProcessingState.loading ||
+          state.processingState == ja.ProcessingState.buffering;
+
+      if (state.processingState == ja.ProcessingState.completed) {
+        playingAyah = null;
+        playingWholeSurah = false;
+        position = Duration.zero;
+        duration = Duration.zero;
+        isBuffering = false;
+      }
+      notifyListeners();
+    });
+
+    _discontinuitySub = _player.positionDiscontinuityStream.listen((event) {
+      if (_stopping ||
+          event.reason != ja.PositionDiscontinuityReason.autoAdvance) {
+        return;
+      }
+
+      // When finite "repeat current ayah" is requested, just_audio's LOOP_ONE
+      // repeats the same item without rebuilding the source. Consume one credit
+      // at each automatic loop. When credits are exhausted, switch back to
+      // normal playlist progression.
+      if (repeatCurrent && repeatCreditsRemaining != null) {
+        if (_consumeRepeatCredit()) {
+          return;
+        }
+        repeatCurrent = false;
+        unawaited(_player.setLoopMode(
+          playingWholeSurah ? ja.LoopMode.all : ja.LoopMode.off,
+        ));
+        notifyListeners();
+      }
+    });
+
+    _errorSub = _player.errorStream.listen((error) {
+      AppLogger.error(
+        'Quran audio player error',
+        error: error,
+      );
+      isBuffering = false;
+      notifyListeners();
+    });
   }
 
-  void _loadSurahContext(SurahModel surah, List<SurahModel> allSurahs) {
+  void _loadSurahContext(
+    SurahModel surah,
+    List<SurahModel> allSurahs,
+  ) {
     _surahNumber = surah.number;
     _surahName = surah.name;
     _totalAyahsInSurah = surah.ayahs.length;
+
     _surahAyahOffset = allSurahs
         .where((s) => s.number < surah.number)
         .fold(0, (sum, s) => sum + s.ayahs.length);
 
     final reciter = appSettings.reciterId;
-    if (_durationsSurah != surah.number || _durationsReciter != reciter || _progress.ayahCount != surah.ayahs.length) {
-      _progress.reset(surah.ayahs.map((a) => SurahProgressModel.weightOfText(a.text)).toList());
+    if (_durationsSurah != surah.number ||
+        _durationsReciter != reciter ||
+        _progress.ayahCount != surah.ayahs.length) {
+      _progress.reset(
+        surah.ayahs
+            .map((a) => SurahProgressModel.weightOfText(a.text))
+            .toList(),
+      );
       _durationsSurah = surah.number;
       _durationsReciter = reciter;
     }
-    _progress.setScope(start: _rangeStartAyah, end: _rangeEndAyah);
+
+    _progress.setScope(
+      start: _rangeStartAyah,
+      end: _rangeEndAyah,
+    );
   }
 
-  // ---------------------------------------------------------------------------
-  // Public playback API
-  // ---------------------------------------------------------------------------
-
-  Future<void> playAyah(SurahModel surah, List<SurahModel> allSurahs, int ayahNumber, {bool keepRepeat = false}) async {
+  Future<void> playAyah(
+    SurahModel surah,
+    List<SurahModel> allSurahs,
+    int ayahNumber, {
+    bool keepRepeat = false,
+  }) async {
     await PlaybackCoordinator.stopRadioForQuran();
-    _ensureInit();
     _rangeStartAyah = null;
     _rangeEndAyah = null;
     _loadSurahContext(surah, allSurahs);
+
     playingWholeSurah = false;
     isPaused = false;
     position = Duration.zero;
     duration = Duration.zero;
-    if (!keepRepeat) repeatCurrent = false;
+    if (!keepRepeat) {
+      repeatCurrent = false;
+      repeatCreditsRemaining = null;
+    }
+
     notifyListeners();
-    await _playAyahAudio(ayahNumber);
+    await _loadAndPlay(
+      startAyah: ayahNumber,
+      endAyah: ayahNumber,
+    );
   }
 
-  Future<void> playWholeSurah(SurahModel surah, List<SurahModel> allSurahs) async {
+  Future<void> playWholeSurah(
+    SurahModel surah,
+    List<SurahModel> allSurahs,
+  ) async {
     await PlaybackCoordinator.stopRadioForQuran();
-    _ensureInit();
     _rangeStartAyah = null;
     _rangeEndAyah = null;
     _loadSurahContext(surah, allSurahs);
+
     playingWholeSurah = true;
     repeatCurrent = false;
+    repeatCreditsRemaining = null;
     isPaused = false;
     position = Duration.zero;
     duration = Duration.zero;
+
     notifyListeners();
-    await _playAyahAudio(1);
-    unawaited(_preloadNext(2));
+    await _loadAndPlay(
+      startAyah: 1,
+      endAyah: _totalAyahsInSurah,
+    );
   }
 
-  /// Plays ayahs [startAyah] through [endAyah] (inclusive) of [surah],
-  /// then stops (or repeats the range if [repeatSurah] is enabled).
-  /// Reuses the same sequential/preloading engine as [playWholeSurah],
-  /// just bounded to the given range instead of the whole surah.
-  Future<void> playRange(SurahModel surah, List<SurahModel> allSurahs, int startAyah, int endAyah) async {
+  Future<void> playRange(
+    SurahModel surah,
+    List<SurahModel> allSurahs,
+    int startAyah,
+    int endAyah,
+  ) async {
+    if (startAyah < 1 ||
+        endAyah < startAyah ||
+        endAyah > surah.ayahs.length) {
+      throw ArgumentError('Invalid Quran ayah range');
+    }
+
     await PlaybackCoordinator.stopRadioForQuran();
-    _ensureInit();
     _rangeStartAyah = startAyah;
     _rangeEndAyah = endAyah;
     _loadSurahContext(surah, allSurahs);
+
     playingWholeSurah = true;
     repeatCurrent = false;
+    repeatCreditsRemaining = null;
     isPaused = false;
     position = Duration.zero;
     duration = Duration.zero;
+
     notifyListeners();
-    await _playAyahAudio(startAyah);
-    unawaited(_preloadNext(startAyah + 1));
+    await _loadAndPlay(
+      startAyah: startAyah,
+      endAyah: endAyah,
+    );
   }
 
-  /// Pauses playback in place (resumable), for the system media
-  /// notification's Pause button. Distinct from [stop], which fully
-  /// clears the "now playing" ayah.
-  Future<void> pause() async {
+  Future<void> _loadAndPlay({
+    required int startAyah,
+    required int endAyah,
+    Duration initialPosition = Duration.zero,
+  }) async {
+    final token = ++_playToken;
+    _stopping = false;
+
+    _playlistStartAyah = startAyah;
+    _playlistEndAyah = endAyah;
+    playingAyah = startAyah;
+    isBuffering = true;
+    position = initialPosition;
+    duration = Duration.zero;
+
+    await _player.stop();
+
+    // Resolve local files in parallel. This is important for long surahs:
+    // localPathFor() may touch the filesystem, and doing 286 awaits serially
+    // would introduce an unnecessary delay before the first ayah starts.
+    final ayahs = List<int>.generate(
+      endAyah - startAyah + 1,
+      (index) => startAyah + index,
+    );
+
+    final localPaths = await Future.wait(
+      ayahs.map(
+        (ayah) => AudioDownloadService.localPathFor(
+          appSettings.reciterId,
+          _surahAyahOffset + ayah,
+        ),
+      ),
+    );
+
+    if (token != _playToken) return;
+
+    final sources = <ja.AudioSource>[];
+    for (var i = 0; i < ayahs.length; i++) {
+      final globalNumber = _surahAyahOffset + ayahs[i];
+      final localPath = localPaths[i];
+
+      if (localPath != null) {
+        sources.add(ja.AudioSource.file(localPath));
+      } else {
+        sources.add(
+          ja.AudioSource.uri(
+            Uri.parse(
+              AppSources.ayahAudioUrl(
+                globalNumber,
+                reciter: appSettings.reciterId,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    if (sources.isEmpty || token != _playToken) return;
+
     try {
-      await _active.pause();
-      isPaused = true;
+      await _player.setLoopMode(
+        _loopModeForCurrentSettings(),
+      );
+
+      await _player.setAudioSources(
+        sources,
+        preload: true,
+        initialIndex: 0,
+        initialPosition: initialPosition,
+      );
+
+      if (token != _playToken) return;
+
+      await _player.setSpeed(playbackRate);
+      unawaited(_player.play());
+
+      isBuffering = false;
+      isPaused = false;
+      duration = _player.duration ?? Duration.zero;
       notifyListeners();
     } catch (e, st) {
-      AppLogger.error('Failed to pause ayah playback', error: e, stackTrace: st);
+      if (token == _playToken) {
+        isBuffering = false;
+        playingAyah = null;
+        playingWholeSurah = false;
+        AppLogger.error(
+          'Failed to start Quran playlist',
+          error: e,
+          stackTrace: st,
+        );
+        notifyListeners();
+      }
     }
   }
 
-  /// Resumes playback after [pause], for the system media notification's
-  /// Play button.
+  ja.LoopMode _loopModeForCurrentSettings() {
+    if (repeatCurrent) return ja.LoopMode.one;
+    if (repeatSurah && playingWholeSurah) return ja.LoopMode.all;
+    return ja.LoopMode.off;
+  }
+
+  Future<void> pause() async {
+    try {
+      await _player.pause();
+      isPaused = true;
+      notifyListeners();
+    } catch (e, st) {
+      AppLogger.error(
+        'Failed to pause Quran audio',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
   Future<void> resume() async {
     try {
-      await _active.resume();
+      await _player.play();
       isPaused = false;
       notifyListeners();
     } catch (e, st) {
-      AppLogger.error('Failed to resume ayah playback', error: e, stackTrace: st);
+      AppLogger.error(
+        'Failed to resume Quran audio',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
   Future<void> seek(Duration target) async {
     try {
-      await _active.seek(target);
+      await _player.seek(target);
       position = target;
       notifyListeners();
     } catch (e, st) {
-      AppLogger.error('Failed to seek Quran audio', error: e, stackTrace: st);
+      AppLogger.error(
+        'Failed to seek Quran audio',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Engine
-  // ---------------------------------------------------------------------------
-
-  /// Starts [ayahNumber] on the active player with a fresh source.
-  /// [isRetry] keeps the per-ayah retry counters (used by the recovery paths).
-  Future<void> _playAyahAudio(int ayahNumber, {bool isRetry = false}) async {
-    final token = ++_playToken;
-    final globalNumber = _surahAyahOffset + ayahNumber;
-    _stallTimer?.cancel();
-    playingAyah = ayahNumber;
-    if (!isRetry) {
-      _prematureRetries = 0;
-      _stallRetries = 0;
-    }
-    position = Duration.zero;
-    duration = Duration.zero;
-    isBuffering = true;
-    notifyListeners();
-
-    final player = _active;
-    try {
-      await player.stop();
-    } catch (_) {
-      // Nothing loaded yet  expected on first play, safe to ignore.
-    }
-    _loadedAyah[player] = ayahNumber;
-    _playerDuration.remove(player);
-
-    try {
-      final localPath = await AudioDownloadService.localPathFor(appSettings.reciterId, globalNumber);
-      if (token != _playToken) return; // superseded by a newer play/stop
-      if (localPath != null) {
-        await player.play(DeviceFileSource(localPath));
-      } else {
-        await player.play(UrlSource(AppSources.ayahAudioUrl(globalNumber, reciter: appSettings.reciterId)));
-      }
-      if (token != _playToken) return;
-      await player.setPlaybackRate(playbackRate);
-      _armStallWatchdog(ayahNumber, token);
-    } catch (e, st) {
-      if (token == _playToken) {
-        AppLogger.error('Ayah audio playback failed', error: e, stackTrace: st);
-        playingAyah = null;
-        playingWholeSurah = false;
-      }
-    } finally {
-      if (token == _playToken) {
-        isBuffering = false;
-        notifyListeners();
-      }
-    }
-  }
-
-  /// If an ayah shows no progress at all after starting (a silent stall), retry
-  /// it once with a fresh fetch instead of leaving the user in silence.
-  void _armStallWatchdog(int ayahNumber, int token) {
-    _stallTimer?.cancel();
-    _stallTimer = Timer(const Duration(seconds: 12), () {
-      if (token != _playToken || playingAyah != ayahNumber) return;
-      if (isPaused || position > Duration.zero) return;
-      if (_stallRetries >= 1) return;
-      _stallRetries++;
-      AppLogger.error('Ayah $ayahNumber showed no progress after 12s; retrying once');
-      unawaited(_playAyahAudio(ayahNumber, isRetry: true));
-    });
-  }
-
-  Future<void> _preloadNext(int ayahNumber) async {
-    final generation = ++_preloadGeneration;
-    _preloadedAyah = null;
-    if (!playingWholeSurah) return;
-    if (ayahNumber > (_rangeEndAyah ?? _totalAyahsInSurah)) return;
-    final globalNumber = _surahAyahOffset + ayahNumber;
-
-    final localPath = await AudioDownloadService.localPathFor(appSettings.reciterId, globalNumber);
-    if (generation != _preloadGeneration) return;
-    if (localPath != null) return; // local files start instantly; _advanceSequential fresh-fetches them
-
-    final standby = _standby;
-    _loadedAyah[standby] = ayahNumber;
-    _playerDuration.remove(standby);
-    try {
-      await standby.setSourceUrl(AppSources.ayahAudioUrl(globalNumber, reciter: appSettings.reciterId));
-      // Only trust this preload if nothing newer started while it was loading.
-      if (generation == _preloadGeneration && identical(standby, _standby)) {
-        _preloadedAyah = ayahNumber;
-      }
-    } catch (e, st) {
-      if (generation == _preloadGeneration) _preloadedAyah = null;
-      AppLogger.error('Preload failed for ayah $ayahNumber -- will fetch fresh when reached instead of risking a silent stall', error: e, stackTrace: st);
-    }
-  }
-
-  Future<void> _advanceSequential(int nextAyah) async {
-    if (_preloadedAyah != nextAyah) {
-      // Nothing confirmed ready in the standby player -- a normal fresh fetch
-      // always either plays or reports a real error.
-      await _playAyahAudio(nextAyah);
-      unawaited(_preloadNext(nextAyah + 1));
-      return;
-    }
-
-    final previousActive = _active;
-    _active = _standby;
-    _standby = previousActive;
-    _preloadedAyah = null;
-    _preloadGeneration++;
-    _playToken++; // invalidate any in-flight fresh play
-    _stallTimer?.cancel();
-
-    playingAyah = nextAyah;
-    _prematureRetries = 0;
-    _stallRetries = 0;
-    position = Duration.zero;
-    // The preloaded player already reported its own length while it was standby.
-    duration = _playerDuration[_active] ?? Duration.zero;
-    isBuffering = false;
-    notifyListeners();
-
-    try {
-      await _active.setPlaybackRate(playbackRate);
-      await _active.resume();
-      _armStallWatchdog(nextAyah, _playToken);
-    } catch (e, st) {
-      AppLogger.error('Resuming preloaded ayah failed, falling back to fresh fetch', error: e, stackTrace: st);
-      await _playAyahAudio(nextAyah);
-      unawaited(_preloadNext(nextAyah + 1));
-      return;
-    }
-
-    // The finished player has already stopped by itself; reset it for reuse.
-    try {
-      await previousActive.stop();
-    } catch (_) {}
-
-    unawaited(_preloadNext(nextAyah + 1));
-  }
-
-  /// True when the player reported "completed" well before the ayah's known
-  /// length: a truncated stream (network hiccup), not a real end.
-  bool _endedPrematurely(AudioPlayer source) {
-    if (_prematureRetries >= 1) return false;
-    final expected = _playerDuration[source] ?? duration;
-    if (expected <= Duration.zero || position <= Duration.zero) return false;
-    final remaining = expected - position;
-    final eightPercent = (expected.inMilliseconds * 0.08).round();
-    final tolerance = Duration(milliseconds: eightPercent > 1500 ? eightPercent : 1500);
-    return remaining > tolerance;
-  }
-
-  Future<void> _recoverPrematureEnd(int ayah) async {
-    _prematureRetries++;
-    final resumeAt = position;
-    AppLogger.error('Ayah $ayah ended at ${resumeAt.inMilliseconds}ms of ${duration.inMilliseconds}ms; retrying from there instead of skipping');
-    _advanceInProgress = true;
-    try {
-      await _playAyahAudio(ayah, isRetry: true);
-      if (playingAyah == ayah && resumeAt > Duration.zero) {
-        await _active.seek(resumeAt);
-        position = resumeAt;
-        notifyListeners();
-      }
-    } catch (e, st) {
-      AppLogger.error('Premature-end recovery failed', error: e, stackTrace: st);
-    } finally {
-      _advanceInProgress = false;
-    }
-  }
-
-  void _handleComplete(AudioPlayer source) {
-    if (!identical(source, _active)) return; // stray event from the preloading standby player
-    if (_advanceInProgress) return;
-    final ayah = playingAyah;
-    if (ayah == null) return;
-
-    if (_endedPrematurely(source)) {
-      unawaited(_recoverPrematureEnd(ayah));
-      return;
-    }
-
-    if (repeatCurrent) {
-      if (_consumeRepeatCredit()) {
-        unawaited(_playAyahAudio(ayah));
-        return;
-      }
-      repeatCurrent = false;
-    }
-
-    if (playingWholeSurah) {
-      final nextAyah = ayah + 1;
-      final effectiveEnd = _rangeEndAyah ?? _totalAyahsInSurah;
-      if (nextAyah <= effectiveEnd) {
-        _advanceInProgress = true;
-        unawaited(_advanceSequential(nextAyah).whenComplete(() => _advanceInProgress = false));
-        return;
-      }
-      if (repeatSurah) {
-        final restartAt = _rangeStartAyah ?? 1;
-        _advanceInProgress = true;
-        unawaited(_restartFrom(restartAt).whenComplete(() => _advanceInProgress = false));
-        return;
-      }
-    }
-
-    _stallTimer?.cancel();
-    playingAyah = null;
-    playingWholeSurah = false;
-    notifyListeners();
-  }
-
-  Future<void> _restartFrom(int ayah) async {
-    await _playAyahAudio(ayah);
-    unawaited(_preloadNext(ayah + 1));
-  }
-
-  /// Changes the reciter without throwing away the current reading position.
-  /// If Quran playback is active, the same ayah is restarted with the new
-  /// reciter and seeks back to the exact position; whole-surah mode, the played
-  /// range and pause state are restored as well.
   Future<void> changeReciter(
     String reciterId, {
     required SurahModel surah,
@@ -538,105 +530,73 @@ class QuranAudioService extends ChangeNotifier {
 
     if (!wasPlaying || savedAyah == null) return;
 
-    _ensureInit();
     _rangeStartAyah = savedRangeStart;
     _rangeEndAyah = savedRangeEnd;
     _loadSurahContext(surah, allSurahs);
+
     playingWholeSurah = savedWhole;
     repeatCurrent = savedRepeatCurrent;
     repeatSurah = savedRepeatSurah;
     repeatCreditsRemaining = savedRepeatCredits;
     isPaused = false;
-    await _playAyahAudio(savedAyah);
 
-    if (savedPosition > Duration.zero) {
-      await _awaitDuration(const Duration(seconds: 3));
-      if (duration > Duration.zero) {
-        final safePosition = savedPosition <= duration ? savedPosition : duration;
-        try {
-          await _active.seek(safePosition);
-          position = safePosition;
-        } catch (e, st) {
-          AppLogger.error('Could not restore position after reciter change', error: e, stackTrace: st);
-        }
-      }
-    }
-    if (savedWhole) {
-      unawaited(_preloadNext(savedAyah + 1));
-    }
+    final endAyah = savedWhole
+        ? (savedRangeEnd ?? _totalAyahsInSurah)
+        : savedAyah;
+
+    await _loadAndPlay(
+      startAyah: savedAyah,
+      endAyah: endAyah,
+      initialPosition: savedPosition,
+    );
+
     if (savedPaused) {
-      await _active.pause();
+      await _player.pause();
       isPaused = true;
-    }
-    notifyListeners();
-  }
-
-  /// Waits (up to [timeout]) for the current ayah's length to be reported.
-  Future<void> _awaitDuration(Duration timeout) async {
-    final end = DateTime.now().add(timeout);
-    while (duration <= Duration.zero && DateTime.now().isBefore(end)) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      notifyListeners();
     }
   }
 
-  Future<void> stop() async {
-    _stallTimer?.cancel();
-    _playToken++;
-    _preloadGeneration++;
+  Future<void> setSpeed(double rate) async {
+    if (rate <= 0) return;
+    playbackRate = rate;
     try {
-      await _active.stop();
-    } catch (_) {
-      // Already stopped/nothing loaded  fine.
+      await _player.setSpeed(rate);
+    } catch (e, st) {
+      AppLogger.error(
+        'Failed to set Quran playback speed',
+        error: e,
+        stackTrace: st,
+      );
     }
-    try {
-      await _standby.stop();
-    } catch (_) {
-      // Nothing preloaded  fine.
-    }
-    playingAyah = null;
-    playingWholeSurah = false;
-    isPaused = false;
-    isBuffering = false;
-    _rangeStartAyah = null;
-    _rangeEndAyah = null;
-    _progress.setScope();
-    _preloadedAyah = null;
-    _advanceInProgress = false;
-    _loadedAyah.clear();
-    _playerDuration.clear();
-    position = Duration.zero;
-    duration = Duration.zero;
     notifyListeners();
   }
 
   void toggleRepeat() {
     repeatCurrent = !repeatCurrent;
-    notifyListeners();
-  }
-
-  /// Sets playback speed (e.g. 0.5-2.0) for the current and future ayahs
-  /// this session. Applied immediately to the playing ayah and to the
-  /// preloaded next one.
-  Future<void> setSpeed(double rate) async {
-    playbackRate = rate;
-    try {
-      await _active.setPlaybackRate(rate);
-    } catch (_) {
-      // Nothing playing yet -- fine, applies on next play.
+    if (repeatCurrent) {
+      repeatCreditsRemaining ??= null;
+    } else {
+      repeatCreditsRemaining = null;
     }
-    try {
-      await _standby.setPlaybackRate(rate);
-    } catch (_) {}
+    unawaited(_player.setLoopMode(_loopModeForCurrentSettings()));
     notifyListeners();
   }
 
   void toggleRepeatSurah() {
     repeatSurah = !repeatSurah;
+    unawaited(_player.setLoopMode(_loopModeForCurrentSettings()));
     notifyListeners();
   }
 
   void setRepeatCount(int? count) {
     repeatCreditsRemaining = count;
+    if (count != null && count <= 0) {
+      repeatCurrent = false;
+      unawaited(_player.setLoopMode(_loopModeForCurrentSettings()));
+    } else if (repeatCurrent) {
+      unawaited(_player.setLoopMode(ja.LoopMode.one));
+    }
     notifyListeners();
   }
 
@@ -646,8 +606,40 @@ class QuranAudioService extends ChangeNotifier {
     repeatCreditsRemaining = repeatCreditsRemaining! - 1;
     return true;
   }
+
+  Future<void> stop() async {
+    _stopping = true;
+    _playToken++;
+
+    try {
+      await _player.stop();
+    } catch (_) {}
+
+    playingAyah = null;
+    playingWholeSurah = false;
+    isPaused = false;
+    isBuffering = false;
+    _rangeStartAyah = null;
+    _rangeEndAyah = null;
+    _progress.setScope();
+    position = Duration.zero;
+    duration = Duration.zero;
+    notifyListeners();
+
+    _stopping = false;
+  }
+
+  @override
+  void dispose() {
+    _indexSub?.cancel();
+    _durationSub?.cancel();
+    _positionSub?.cancel();
+    _stateSub?.cancel();
+    _discontinuitySub?.cancel();
+    _errorSub?.cancel();
+    unawaited(_player.dispose());
+    super.dispose();
+  }
 }
 
-/// Single app-wide instance  playback survives navigation between
-/// screens because it isn't tied to any one screen's lifecycle.
 final QuranAudioService quranAudio = QuranAudioService.instance;
