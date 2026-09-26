@@ -1,7 +1,8 @@
 name: wirdi
 description: "وردي — Islamic daily Quran, Azkar, Prayer & Tasbeeh companion."
 publish_to: 'none'
-version: 1.56.3+25
+
+version: 1.56.3+26
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -22,6 +23,7 @@ dependencies:
   intl: ^0.20.2
   geolocator: ^13.0.2
   audioplayers: ^6.1.0
+  just_audio: ^0.10.6
   url_launcher: ^6.3.1
   path_provider: ^2.1.5
   share_plus: ^10.1.4
@@ -44,6 +46,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+
   fonts:
     - family: AmiriQuran
       fonts:
@@ -54,6 +57,7 @@ flutter:
     - family: QuranKFGQPCUthmanic
       fonts:
         - asset: "assets/fonts/Quran/KFGQPC Uthmanic Script HAFS Regular.otf"
+
   assets:
     - assets/fonts/
     - assets/data/
