@@ -1,6 +1,6 @@
 # Wirdi — Islamic Companion App
 
-**Version:** 1.56.2 (Build 24) | **Code Version:** v16.1.30 (Real-photo identity)  
+**Version:** 1.56.3 (Build 25) | **Code Version:** v16.1.31 (Dead-code/analyze fix)  
 **Status:** Release-prep + comprehensive-review + visual-identity fixes applied -- see RELEASE_PREP_v1.54.md, RELEASE_PREP_v1.55.md and RELEASE_PREP_v1.56.md for what changed and the manual steps still required
 
 ## What is Wirdi?

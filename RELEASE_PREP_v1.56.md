@@ -163,3 +163,63 @@ image contrast/text legibility on Qibla and Moon in particular (their `scrimOpac
 values were chosen by eye from the cropped preview images, not measured against real
 device brightness), and confirm `flutter analyze` is clean (this is the second batch
 of Dart code in this project that has never been run through a real compiler).
+
+## v1.56.3 (build 25) -- second `flutter analyze` run, second real fix
+
+The second CI run (after build 24) got further -- past the const/getter bug -- and
+`flutter analyze` failed again, this time with 4 warnings (which this CI treats as
+build failures, i.e. `flutter analyze` exits non-zero on ANY reported issue, warning
+or error, not only on errors):
+
+```
+warning • A value for optional parameter 'opacity' isn't ever given
+  • lib/features/moon/moon_screen.dart:195:63 • unused_element_parameter
+  (same warning in prayer_times_screen.dart, qibla_screen.dart, quran_screen.dart)
+```
+
+**Cause:** v1.56.2 replaced these four screens' `flexibleSpace: _MosaicBg(...)` with
+`WirdiIdentityBackground.photo(...)`, which was the *only* place each of these files
+called `_MosaicBg` -- so its private `_MosaicBg`/`_MosaicBgState` classes (and the
+`_MosaicCellPainter` they used) became fully dead code with zero remaining callers.
+The analyzer's `unused_element_parameter` check flagged the leftover `opacity`
+parameter specifically, since no call site anywhere in the file supplies it -- but it
+was really a symptom of the whole class being unused now.
+
+**Fix:** rather than silence the warning, deleted the dead code outright -- the
+`_MosaicBg` / `_MosaicBgState` / `_MosaicCellPainter` classes were the last thing in
+all four files (verified before deleting, in each file, that nothing followed them),
+so each file was cleanly truncated at that point. The now-unused `import 'dart:ui' as
+ui;` (only used by the deleted classes, confirmed by counting remaining `ui.`
+references -- zero in all four) was removed too, since an unused import is its own
+`flutter analyze` failure.
+
+**Also proactively fixed the same latent issue in Home** (`home_dashboard_screen.dart`):
+its `_MosaicBg` copy has no optional `opacity` parameter (`col`/`row` are both
+`required`), so it happened not to trip `unused_element_parameter` and this
+particular CI run didn't flag it -- but it was dead for exactly the same reason
+(replaced by `WirdiIdentityBackground.photo` back in v1.56.0/v1.56.2) and was cleaned
+up the same way rather than left as a ticking time bomb for the next `flutter
+analyze` run or a stricter lint rule.
+
+**A mistake caught and fixed within this same pass:** the first attempt at deleting
+the dead code in these five files used a naive string-replace that only removed the
+`class _MosaicBg extends StatefulWidget {` line itself, leaving the rest of that
+class's body (now missing its opening brace) still in the file -- which would have
+been a syntax error, not a clean fix. This was caught immediately by re-running the
+syntax check on the edited files (the same tree-sitter-based check used throughout
+this whole review) before moving on, and corrected by truncating each file from the
+dead-code marker to the true end of file instead. Every file was re-verified clean
+afterward. This is a concrete example of why every edit in this whole project has
+been syntax-checked immediately after being made, not just once at the end.
+
+**Verified after this fix:** all 183 `lib/` files re-parse with zero syntax errors;
+the const/non-const-getter scan (build 23's bug class) still finds nothing; every
+`_MosaicBg`/`_MosaicBgState`/`_MosaicCellPainter`/`dart:ui` reference in these five
+files is gone (checked by direct grep, not just "should be gone"); no other import in
+any of the eight files touched across v1.56.0-v1.56.3 became unused as a side effect
+(checked programmatically, not just for `dart:ui`). **Still not verified:** an actual
+`flutter analyze` run -- this is the third batch of changes in this project's history
+to reach CI without having been compiled first, and the second one to come back with
+a real, previously-invisible bug. If this next CI run finds anything else, the same
+process applies: paste the log, get a targeted fix, verified the same way before
+being sent back.
